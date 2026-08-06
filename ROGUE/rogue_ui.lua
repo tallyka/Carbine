@@ -25216,7 +25216,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 249 loaded - Charge Mana + Attack now cycles a 4s charge phase and a 6s punch phase instead of a 15s charge / 5-punch cycle", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 250 loaded - Added a Self Damage tab (Knock Yourself / Kill Yourself), and the druid path now gates on Tlachta's 3 skills (Fons Vitae/Verdien/Life Sense) and Rem's ScroomSpeech, redoing the talk if missing", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -26291,7 +26291,7 @@ end
                     elseif step.kind == "wait_ingredient" then
                         table.insert(steps, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
                     elseif step.kind == "skill_gate" then
-                        table.insert(steps, { kind = "skill_gate", skill = step.skill, redo_from = step.redo_from })
+                        table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "return" and not step.cf then
                         table.insert(steps, { kind = "return", serverhop = step.serverhop })
                     elseif step.kind == "serverhop" then
@@ -26373,7 +26373,7 @@ end
                     elseif step.kind == "wait_ingredient" then
                         table.insert(xp_path, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
                     elseif step.kind == "skill_gate" then
-                        table.insert(xp_path, { kind = "skill_gate", skill = step.skill, redo_from = step.redo_from })
+                        table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "return" and not step.x then
                         table.insert(xp_path, { kind = "return", serverhop = step.serverhop })
                     elseif step.kind == "serverhop" then
@@ -27307,7 +27307,7 @@ end
                                         table.insert(xp_path, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
                                         added = added + 1
                                     elseif step.kind == "skill_gate" then
-                                        table.insert(xp_path, { kind = "skill_gate", skill = step.skill, redo_from = step.redo_from })
+                                        table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                                         added = added + 1
                                     elseif step.kind == "return" and not step.x then
                                         table.insert(xp_path, { kind = "return", serverhop = step.serverhop })
@@ -29269,6 +29269,93 @@ end
                 end)
             end)
 
+            -- Self Fall Damage: the client-side fall-damage remote is renamed to a
+            -- random GUID every rejoin and can't be hardcoded, so this hooks EVERY
+            -- remote under CharacterHandler.Remotes and watches for the fall-damage
+            -- call signature (exactly 2 args: a {number, number} table + an empty
+            -- table). Re-calibrates on EVERY real fall (not just the first) so the
+            -- cached reference/last-seen values never go stale after a respawn or a
+            -- serverhop swaps the remote out. Own isolated pcall closure - see the
+            -- Teleport tab comment above for why (200-local-register ceiling).
+            pcall(function()
+                local win = getgenv().XPFARM_WINDOW
+                local sd_tab
+                if win and win.AddTab then
+                    sd_tab = win:AddTab("Self Damage", "skull")
+                elseif library and library.Tabs and library.Tabs.Misc then
+                    sd_tab = library.Tabs.Misc
+                else
+                    error("no window/tab reference reachable")
+                end
+                local group_sd = sd_tab:AddLeftGroupbox("Self Fall Damage")
+
+                local sd_last = { 0.10793217244300189, 0.17512923530910326 }
+
+                local function sd_get_remotes()
+                    local char = plr.Character
+                    local ch = char and char:FindFirstChild("CharacterHandler")
+                    return ch and ch:FindFirstChild("Remotes")
+                end
+
+                local sd_hooked = {}
+                local function sd_hook_remote(r)
+                    if sd_hooked[r] or not r:IsA("RemoteEvent") then return end
+                    sd_hooked[r] = true
+                    local old
+                    pcall(function()
+                        old = hookfunction(r.FireServer, function(self, ...)
+                            if self == r then
+                                local args = { ... }
+                                if #args == 2 and typeof(args[1]) == "table" and typeof(args[2]) == "table" then
+                                    local a1 = args[1]
+                                    local n, a2n = 0, 0
+                                    for _ in pairs(a1) do n = n + 1 end
+                                    for _ in pairs(args[2]) do a2n = a2n + 1 end
+                                    if n == 2 and a2n == 0 and typeof(a1[1]) == "number" and typeof(a1[2]) == "number" then
+                                        getgenv().Carbine_FallDamageRemote = r
+                                        sd_last[1], sd_last[2] = a1[1], a1[2]
+                                        library:Notify(string.format("Self Damage: recalibrated (%.4f, %.4f)", a1[1], a1[2]), 3)
+                                    end
+                                end
+                            end
+                            return old(self, ...)
+                        end)
+                    end)
+                end
+                local function sd_hook_all()
+                    local remotes = sd_get_remotes()
+                    if not remotes then return end
+                    for _, r in ipairs(remotes:GetChildren()) do sd_hook_remote(r) end
+                    remotes.ChildAdded:Connect(sd_hook_remote)
+                end
+                sd_hook_all()
+                plr.CharacterAdded:Connect(function() task.wait(1); sd_hook_all() end)
+
+                local function sd_fire(a1, a2)
+                    local r = rawget(getgenv(), "Carbine_FallDamageRemote")
+                    if not r or not r.Parent then
+                        library:Notify("Self Damage: not calibrated yet - take one real fall to calibrate first", 6)
+                        return
+                    end
+                    pcall(function() r:FireServer({ a1, a2 }, {}) end)
+                end
+
+                group_sd:AddLabel("sd_lbl", {
+                    Text = "Auto-calibrates from your real fall damage (re-syncs on every fall). Take one real fall first if the buttons say 'not calibrated'.",
+                    DoesWrap = true
+                })
+                group_sd:AddButton("sd_knock", {
+                    Text = "Knock Yourself",
+                    Tooltip = "Fires the fall-damage remote at a light, non-lethal magnitude (same as a normal short fall).",
+                    Func = function() sd_fire(0.10793217244300189, 0.17512923530910326) end
+                })
+                group_sd:AddButton("sd_kill", {
+                    Text = "Kill Yourself",
+                    Tooltip = "Fires the fall-damage remote at a lethal magnitude - this WILL kill you.",
+                    Func = function() sd_fire(0.8059, 3.0100) end
+                })
+            end)
+
             -- Stella Map Hide: replicates ONLY Stella's self-hide signal (a signed POST
             -- to /api/positions with players={} and me=UserId). It does NOT run Stella's
             -- remote payload and reports ZERO other players - it just tells their backend
@@ -30142,38 +30229,48 @@ end
                                 pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
                                 break
                             elseif step.kind == "skill_gate" then
-                                -- checks the Backpack for the named skill item (case-insensitive
+                                -- checks the Backpack for the named skill item(s) (case-insensitive
                                 -- substring match, since we don't know the exact capitalization
-                                -- the game uses) - if it's missing, physically walk back through
+                                -- the game uses) - if any are missing, physically walk back through
                                 -- the recorded points to redo_from and retry that segment instead
                                 -- of raw-jumping the index (a raw jump leaves the next step's
                                 -- target far away, which fights the far-target reroute - same
                                 -- lesson as the potion-retry fix, BUILD 224).
+                                -- Accepts either step.skills (a list - ALL must be present) or the
+                                -- older single step.skill string, for backward compatibility.
                                 if not catchup then
-                                    local want = tostring(step.skill or ""):lower()
-                                    local has_skill = false
-                                    if want ~= "" then
+                                    local wanted = {}
+                                    if type(step.skills) == "table" and #step.skills > 0 then
+                                        for _, s in ipairs(step.skills) do table.insert(wanted, tostring(s)) end
+                                    elseif step.skill and tostring(step.skill) ~= "" then
+                                        table.insert(wanted, tostring(step.skill))
+                                    end
+                                    local function has_item(want)
+                                        want = want:lower()
                                         local bp = FindFirstChild(plr, "Backpack")
                                         if bp then
                                             for _, v in ipairs(bp:GetChildren()) do
-                                                if tostring(v.Name):lower():find(want, 1, true) then has_skill = true; break end
+                                                if tostring(v.Name):lower():find(want, 1, true) then return true end
                                             end
                                         end
-                                        if not has_skill then
-                                            local char = plr.Character
-                                            if char then
-                                                for _, v in ipairs(char:GetChildren()) do
-                                                    if tostring(v.Name):lower():find(want, 1, true) then has_skill = true; break end
-                                                end
+                                        local char = plr.Character
+                                        if char then
+                                            for _, v in ipairs(char:GetChildren()) do
+                                                if tostring(v.Name):lower():find(want, 1, true) then return true end
                                             end
                                         end
+                                        return false
                                     end
-                                    if has_skill then
-                                        library:Notify("Path: skill check OK - have " .. tostring(step.skill), 3)
+                                    local missing = {}
+                                    for _, w in ipairs(wanted) do
+                                        if not has_item(w) then table.insert(missing, w) end
+                                    end
+                                    if #wanted == 0 or #missing == 0 then
+                                        library:Notify("Path: skill check OK - have " .. table.concat(wanted, ", "), 3)
                                     else
                                         local redo_to = tonumber(step.redo_from)
                                         if redo_to and redo_to >= 1 and redo_to <= i then
-                                            library:Notify(string.format("Path: don't have '%s' yet - walking back to redo waypoint #%d", tostring(step.skill), redo_to), 6)
+                                            library:Notify(string.format("Path: missing %s - walking back to redo waypoint #%d", table.concat(missing, ", "), redo_to), 6)
                                             for j = i, redo_to, -1 do
                                                 if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                                     and shared and not shared.is_unloading) then break end
@@ -30185,7 +30282,7 @@ end
                                             i = redo_to
                                             jumped = true
                                         else
-                                            library:Notify(string.format("Path: don't have '%s' and no valid redo point set - continuing anyway", tostring(step.skill)), 6)
+                                            library:Notify(string.format("Path: missing %s and no valid redo point set - continuing anyway", table.concat(missing, ", ")), 6)
                                         end
                                     end
                                 end
