@@ -25216,7 +25216,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 248 loaded - Charge Mana + Attack now punches exactly 5 times per cycle instead of a fixed time window, and the GitHub hub is no longer encrypted", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 249 loaded - Charge Mana + Attack now cycles a 4s charge phase and a 6s punch phase instead of a 15s charge / 5-punch cycle", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31237,10 +31237,10 @@ end
                                     while Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                         and shared and not shared.is_unloading
                                         and (os.clock() - mt0) < cap and not cleared do
-                                        -- CHARGE PHASE: up to 15s, or until mana's actually topped up
+                                        -- CHARGE PHASE: exactly 4s, or until mana's actually topped up
                                         library:Notify("Path: charging mana...", 3)
                                         local ct0 = os.clock()
-                                        while (os.clock() - ct0) < 15
+                                        while (os.clock() - ct0) < 4
                                             and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                             and shared and not shared.is_unloading do
                                             pcall(function() utility:charge_mana_until(98) end)
@@ -31255,12 +31255,13 @@ end
                                         if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                             and shared and not shared.is_unloading) then break end
 
-                                        -- PUNCH PHASE: exactly 5 M1 swings (not a time window),
-                                        -- holding position, bare-handed, then back to charging
+                                        -- PUNCH PHASE: exactly 6s of M1 swings, holding position,
+                                        -- bare-handed, then back to charging
                                         library:Notify("Path: attacking (fists)...", 3)
-                                        for punch_n = 1, 5 do
-                                            if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
-                                                and shared and not shared.is_unloading) then break end
+                                        local pt0 = os.clock()
+                                        while (os.clock() - pt0) < 6
+                                            and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                            and shared and not shared.is_unloading do
                                             if step.cf then
                                                 local hrp_now = local_hrp and local_hrp()
                                                 if hrp_now then
