@@ -25216,7 +25216,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 250 loaded - Added a Self Damage tab (Knock Yourself / Kill Yourself), and the druid path now gates on Tlachta's 3 skills (Fons Vitae/Verdien/Life Sense) and Rem's ScroomSpeech, redoing the talk if missing", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 251 loaded - Knock Yourself now fires (0, 1) to actually knock you down instead of a light damage tick", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -29346,8 +29346,8 @@ end
                 })
                 group_sd:AddButton("sd_knock", {
                     Text = "Knock Yourself",
-                    Tooltip = "Fires the fall-damage remote at a light, non-lethal magnitude (same as a normal short fall).",
-                    Func = function() sd_fire(0.10793217244300189, 0.17512923530910326) end
+                    Tooltip = "Fires the fall-damage remote at (0, 1) - knocks you down without meaningful damage.",
+                    Func = function() sd_fire(0, 1) end
                 })
                 group_sd:AddButton("sd_kill", {
                     Text = "Kill Yourself",
