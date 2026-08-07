@@ -12596,7 +12596,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 return LocationName
             end
 
-            local function Gate(where, expected_destination)
+            local function GateImpl(where, expected_destination)
                 if not trinket_bot.path_running then
                     return false
                 end
@@ -12868,6 +12868,23 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                 warn("Gate teleportation failed: NoFall not found after 2.5s")
                 return false
+            end
+
+            -- Thin wrapper around GateImpl that guarantees trinket_bot.gating gets
+            -- cleared no matter how the gate attempt exits (early return, error,
+            -- anything) - GateImpl has dozens of return points and no single one of
+            -- them can be trusted to always run, so pcall + unconditional clear
+            -- afterward is the only reliable way. Other systems (like Hold Perflora)
+            -- check this flag to know when it's actually safe to swap the held tool.
+            local function Gate(where, expected_destination)
+                trinket_bot.gating = true
+                local ok, result = pcall(GateImpl, where, expected_destination)
+                trinket_bot.gating = false
+                if not ok then
+                    warn("Gate error: " .. tostring(result))
+                    return false
+                end
+                return result
             end
 
             local function CheckForTrinkets()
@@ -16699,47 +16716,34 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             group_trinket_bot:AddToggle("HoldPerflora", {
                 Text = "Hold Perflora",
                 Default = false,
-                Tooltip = "Keeps Perflora equipped and mana charged into its cast range at all times, so it's instantly ready. Steps aside for Gate (won't fight the Gate tool while gating) and re-holds Perflora afterward. Don't combine with Snap Train - they'll fight over mana/tool."
+                Tooltip = "Keeps Perflora equipped at all times (no mana charging - purely so other bots see it held and serverhop away). Steps aside for Gate (won't fight the Gate tool while gating) and re-holds Perflora afterward."
             })
 
             -- Hold Perflora: independent background loop (not tied to ExecutePath, so
             -- it works whether or not the path is currently running) that keeps
-            -- Perflora equipped and charged into its cast-ready range. Never touches
-            -- the currently-held tool while it's "Gate" (mid-gate) or "Idol of War"
-            -- (mid auto-idol-use elsewhere) - just waits for those to finish holding
-            -- their tool, then re-equips Perflora on the next tick.
+            -- Perflora equipped - purely cosmetic/deterrent (other bots scanning for
+            -- a held Perflora will serverhop away), no mana charging involved. Never
+            -- touches the currently-held tool while it's "Gate" (mid-gate) or "Idol
+            -- of War" (mid auto-idol-use elsewhere) - just waits for those to finish
+            -- holding their tool, then re-equips Perflora on the next tick.
             do
                 task.spawn(function()
                     while shared and not shared.is_unloading do
                         task.wait(0.3)
 
-                        if Toggles.HoldPerflora and Toggles.HoldPerflora.Value
-                            and not (Toggles.SnapTrain and Toggles.SnapTrain.Value)
-                            and plr.Character then
+                        if Toggles.HoldPerflora and Toggles.HoldPerflora.Value and plr.Character then
                             local char = plr.Character
                             local hum = FindFirstChildOfClass(char, "Humanoid")
                             local backpack = plr:FindFirstChildOfClass("Backpack")
 
-                            if hum and hum.Health > 0 and backpack and not cs:HasTag(char, "Knocked") then
+                            if hum and hum.Health > 0 and backpack and not cs:HasTag(char, "Knocked") and not trinket_bot.gating then
                                 local held = FindFirstChildOfClass(char, "Tool")
 
-                                if not held or (held.Name ~= "Gate" and held.Name ~= "Idol of War") then
+                                if not held or held.Name ~= "Idol of War" then
                                     local perflora = (held and held.Name == "Perflora") and held or FindFirstChild(backpack, "Perflora")
 
-                                    if perflora then
-                                        if held ~= perflora then
-                                            pcall(function() hum:EquipTool(perflora) end)
-                                            task.wait(0.1)
-                                        end
-
-                                        local mana = FindFirstChild(char, "Mana")
-                                        if mana and utility and cheat_client.spell_cost and cheat_client.spell_cost["Perflora"] then
-                                            local spell_data = cheat_client.spell_cost["Perflora"][1]
-                                            local min_cost, mid_cost = spell_data[1], (spell_data[1] + spell_data[2]) / 2
-                                            if mana.Value < min_cost and not cs:HasTag(char, "Casting") then
-                                                utility:charge_mana_until(mid_cost)
-                                            end
-                                        end
+                                    if perflora and held ~= perflora then
+                                        pcall(function() hum:EquipTool(perflora) end)
                                     end
                                 end
                             end
@@ -25421,7 +25425,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 255 loaded - Added Hold Perflora toggle (keeps it equipped+charged, steps aside for Gate/Idol of War), and added Ice Essence to Auto Use Items", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 257 loaded - Fixed Hold Perflora never switching back after gating (Gate never unequipped itself, so it looked stuck) - now tracks a real gating flag instead of guessing from the held tool", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
