@@ -14202,9 +14202,20 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                                     if distance <= critical_distance then
                                         critical_serverhop_sent = true
-                                        library:Notify(string.format("!! CRITICAL DANGER: Player %s within %.0f studs - immediate serverhop !!", other_player.Name, distance))
-                                        trinket_bot.path_running = false
-                                        SafeServerhop(string.format("Player %s within %.0f studs so am serverhopping instantly!!! (dangerously close)", other_player.Name, distance))
+                                        library:Notify(string.format("!! CRITICAL DANGER: Player %s within %.0f studs - finishing current move then serverhopping !!", other_player.Name, distance))
+                                        local hop_reason = string.format("Player %s within %.0f studs so am serverhopping instantly!!! (dangerously close)", other_player.Name, distance)
+                                        task.spawn(function()
+                                            -- don't cut movement mid-air over a void - let the
+                                            -- character land wherever it was already headed first
+                                            -- (bounded so a genuinely stuck-in-air case doesn't
+                                            -- block the hop forever), THEN stop the path and hop.
+                                            local gt0 = os.clock()
+                                            while plr.Character and (os.clock() - gt0) < 2.5 and InAir() do
+                                                task.wait(0.1)
+                                            end
+                                            trinket_bot.path_running = false
+                                            SafeServerhop(hop_reason)
+                                        end)
                                         return
                                     end
                                 end
@@ -14218,9 +14229,16 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                             local distance = (shrieker_root.Position - bot_pos).Magnitude
                                             if distance <= critical_distance then
                                                 critical_serverhop_sent = true
-                                                library:Notify(string.format("!! CRITICAL DANGER: Shrieker within %.0f studs - immediate serverhop !!", distance))
-                                                trinket_bot.path_running = false
-                                                SafeServerhop(string.format("Shrieker within %.0f studs - serverhopping instantly!!! (necromancer attack)", distance))
+                                                library:Notify(string.format("!! CRITICAL DANGER: Shrieker within %.0f studs - finishing current move then serverhopping !!", distance))
+                                                local hop_reason = string.format("Shrieker within %.0f studs - serverhopping instantly!!! (necromancer attack)", distance)
+                                                task.spawn(function()
+                                                    local gt0 = os.clock()
+                                                    while plr.Character and (os.clock() - gt0) < 2.5 and InAir() do
+                                                        task.wait(0.1)
+                                                    end
+                                                    trinket_bot.path_running = false
+                                                    SafeServerhop(hop_reason)
+                                                end)
                                                 return
                                             end
                                         end
@@ -25350,7 +25368,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 253 loaded - Snap Train now unconditionally unequips/reequips after every click instead of relying on detecting the Casting tag", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 254 loaded - Critical-distance serverhop no longer cuts movement instantly (was dropping you into voids mid-jump) - now finishes landing first, then stops and hops", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
