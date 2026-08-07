@@ -16696,6 +16696,58 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Default = false
             })
 
+            group_trinket_bot:AddToggle("HoldPerflora", {
+                Text = "Hold Perflora",
+                Default = false,
+                Tooltip = "Keeps Perflora equipped and mana charged into its cast range at all times, so it's instantly ready. Steps aside for Gate (won't fight the Gate tool while gating) and re-holds Perflora afterward. Don't combine with Snap Train - they'll fight over mana/tool."
+            })
+
+            -- Hold Perflora: independent background loop (not tied to ExecutePath, so
+            -- it works whether or not the path is currently running) that keeps
+            -- Perflora equipped and charged into its cast-ready range. Never touches
+            -- the currently-held tool while it's "Gate" (mid-gate) or "Idol of War"
+            -- (mid auto-idol-use elsewhere) - just waits for those to finish holding
+            -- their tool, then re-equips Perflora on the next tick.
+            do
+                task.spawn(function()
+                    while shared and not shared.is_unloading do
+                        task.wait(0.3)
+
+                        if Toggles.HoldPerflora and Toggles.HoldPerflora.Value
+                            and not (Toggles.SnapTrain and Toggles.SnapTrain.Value)
+                            and plr.Character then
+                            local char = plr.Character
+                            local hum = FindFirstChildOfClass(char, "Humanoid")
+                            local backpack = plr:FindFirstChildOfClass("Backpack")
+
+                            if hum and hum.Health > 0 and backpack and not cs:HasTag(char, "Knocked") then
+                                local held = FindFirstChildOfClass(char, "Tool")
+
+                                if not held or (held.Name ~= "Gate" and held.Name ~= "Idol of War") then
+                                    local perflora = (held and held.Name == "Perflora") and held or FindFirstChild(backpack, "Perflora")
+
+                                    if perflora then
+                                        if held ~= perflora then
+                                            pcall(function() hum:EquipTool(perflora) end)
+                                            task.wait(0.1)
+                                        end
+
+                                        local mana = FindFirstChild(char, "Mana")
+                                        if mana and utility and cheat_client.spell_cost and cheat_client.spell_cost["Perflora"] then
+                                            local spell_data = cheat_client.spell_cost["Perflora"][1]
+                                            local min_cost, mid_cost = spell_data[1], (spell_data[1] + spell_data[2]) / 2
+                                            if mana.Value < min_cost and not cs:HasTag(char, "Casting") then
+                                                utility:charge_mana_until(mid_cost)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+
             group_trinket_bot:AddLabel("Auto Drop Items")
             group_trinket_bot:AddDropdown("AutoDropItems", {
                 Text = "Auto Drop",
@@ -16724,11 +16776,12 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     "Scroll of Percutiens",
                     "Scroll of Hoppa",
                     "Scroll of Snarvindur",
-                    "Scroll of Manus Dei"
+                    "Scroll of Manus Dei",
+                    "Ice Essence"
                 },
                 Multi = true,
                 Default = {},
-                Tooltip = "Select scrolls to actually USE when picked up, instead of dropping them. Takes priority over Auto Drop if an item is in both lists."
+                Tooltip = "Select items to actually USE when picked up, instead of dropping them. Takes priority over Auto Drop if an item is in both lists."
             })
 
             group_trinket_bot:AddSlider("ProximityCheck", {
@@ -25368,7 +25421,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 254 loaded - Critical-distance serverhop no longer cuts movement instantly (was dropping you into voids mid-jump) - now finishes landing first, then stops and hops", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 255 loaded - Added Hold Perflora toggle (keeps it equipped+charged, steps aside for Gate/Idol of War), and added Ice Essence to Auto Use Items", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -28659,6 +28712,98 @@ end
                         pcall(function()
                             local jr = rps.Requests and rps.Requests:FindFirstChild("JoinPublicServer")
                             if jr then jr:FireServer(jid) else Services.TeleportService:TeleportToPlaceInstance(pid, jid, plr) end
+                        end)
+                    end
+                })
+
+                -- --- Known Servers: list live job ids from ReplicatedStorage.ServerInfo ------
+                -- Same registry get_oldest_server/get_newest_server read above - the game
+                -- replicates every active server's JobId + player count there. This is the
+                -- only place that data exists for non-root places like Gaia (5208655184);
+                -- Roblox's public games.roblox.com servers/Public REST API returns an empty
+                -- list for them, so an external tool can't discover these job ids at all.
+                local known_server_ids = {}
+                local known_server_display = {}
+
+                local function refresh_known_servers()
+                    known_server_ids = {}
+                    known_server_display = {}
+
+                    local serverInfo = FindFirstChild(rps, "ServerInfo")
+                    if not serverInfo then
+                        library:Notify("ServerInfo not found - are you in a live server?", 4)
+                        return
+                    end
+
+                    local entries = {}
+                    for _, serverFolder in ipairs(serverInfo:GetChildren()) do
+                        local jobId = serverFolder.Name
+                        if jobId ~= tostring(game.JobId) then
+                            local playersValue = FindFirstChild(serverFolder, "Players")
+                            local playerCount = 0
+                            if playersValue and playersValue:IsA("StringValue") then
+                                local ok, playerData = pcall(function()
+                                    return Services.HttpService:JSONDecode(playersValue.Value)
+                                end)
+                                if ok and type(playerData) == "table" then
+                                    playerCount = #playerData
+                                end
+                            end
+                            table.insert(entries, {jobId = jobId, players = playerCount})
+                        end
+                    end
+
+                    table.sort(entries, function(a, b) return a.players < b.players end)
+
+                    for _, entry in ipairs(entries) do
+                        local label = string.format("%dp - %s", entry.players, entry.jobId)
+                        table.insert(known_server_display, label)
+                        known_server_ids[label] = entry.jobId
+                    end
+
+                    if Options.classbot_known_servers then
+                        Options.classbot_known_servers:SetValues(known_server_display)
+                        if #known_server_display > 0 then
+                            Options.classbot_known_servers:SetValue(known_server_display[1])
+                        end
+                    end
+
+                    library:Notify(string.format("Found %d known server(s)", #known_server_display), 3)
+                end
+
+                g_ma:AddDivider()
+                g_ma:AddButton("classbot_refresh_known", {
+                    Text = "Refresh Known Servers",
+                    Tooltip = "Scans ReplicatedStorage.ServerInfo for other live servers of THIS place - works for Gaia/Khei even though Roblox's public API won't list them.",
+                    Func = refresh_known_servers
+                })
+                g_ma:AddDropdown("classbot_known_servers", {
+                    Text = "Known Servers (lowest pop first)",
+                    Values = {},
+                    Multi = false,
+                    Callback = function() end
+                })
+                g_ma:AddButton("classbot_copy_known", {
+                    Text = "Copy Job ID",
+                    Tooltip = "Copies just the raw Job ID of the selected known server.",
+                    Func = function()
+                        local label = Options.classbot_known_servers and Options.classbot_known_servers.Value
+                        local jobId = label and known_server_ids[label]
+                        if not jobId then library:Notify("Refresh and pick a server first", 3); return end
+                        if setclipboard then setclipboard(jobId); library:Notify("Job ID copied: " .. jobId) else library:Notify("setclipboard not supported by your executor") end
+                    end
+                })
+                g_ma:AddButton("classbot_join_known", {
+                    Text = "Join Selected Known Server",
+                    DoubleClick = true,
+                    Func = function()
+                        local label = Options.classbot_known_servers and Options.classbot_known_servers.Value
+                        local jobId = label and known_server_ids[label]
+                        if not jobId then library:Notify("Refresh and pick a server first", 3); return end
+                        library:Notify("Joining " .. jobId, 4)
+                        pcall(function()
+                            local jr = rps.Requests and rps.Requests:FindFirstChild("JoinPublicServer")
+                            if jr then jr:FireServer(jobId) else Services.TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId, plr) end
                         end)
                     end
                 })
