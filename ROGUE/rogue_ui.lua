@@ -25350,7 +25350,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 252 loaded - Trinket Bot now waits to land before menuing out to serverhop, and Auto Use Items lets you pick scrolls to actually use instead of drop", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 253 loaded - Snap Train now unconditionally unequips/reequips after every click instead of relying on detecting the Casting tag", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -33922,27 +33922,19 @@ end
                                         utility:LeftClick()
                                     end
 
-                                    local timeout = 0
-                                    repeat
-                                        task.wait(0.005)
-                                        timeout = timeout + 1
-                                    until cs:HasTag(char, "Casting") or not utility or timeout > 20
+                                    -- unconditional unequip/reequip after every click - not
+                                    -- gated behind detecting the "Casting" tag (that race was
+                                    -- too brittle: a short detection window could miss the tag
+                                    -- entirely and skip the unequip/reequip cycle for that
+                                    -- click). Charge -> click -> unequip -> reequip -> repeat.
+                                    adjusted_wait(0.05)
 
-                                    if cs:HasTag(char, "Casting") then
-                                        char.Humanoid:UnequipTools()
-                                        
-                                        timeout = 0
-                                        repeat 
-                                            task.wait(0.01)
-                                            timeout = timeout + 1
-                                        until not cs:HasTag(char, "Casting") or not utility or timeout > 100
-                                        
-                                        if not utility then return end
-                                        task.wait(utility:random_wait(true))
+                                    char.Humanoid:UnequipTools()
+                                    adjusted_wait(0.05)
 
-                                        if cached_tool.Parent == plr.Backpack then
-                                            char.Humanoid:EquipTool(cached_tool)
-                                        end
+                                    if not utility then return end
+                                    if cached_tool.Parent == plr.Backpack then
+                                        char.Humanoid:EquipTool(cached_tool)
                                     end
                                 end
                             end
