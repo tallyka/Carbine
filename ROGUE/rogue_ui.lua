@@ -13147,6 +13147,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     join_oldest_server = Toggles.JoinOldestServer and Toggles.JoinOldestServer.Value or false,
                     auto_pop_pds = Toggles.AutoPopPDs and Toggles.AutoPopPDs.Value or false,
                     auto_drop_items = Options.AutoDropItems and Options.AutoDropItems.Value or {},
+                    auto_use_items = Options.AutoUseItems and Options.AutoUseItems.Value or {},
                     kick_on_trinket = Toggles.KickOnTrinket and Toggles.KickOnTrinket.Value or false,
                     kick_trinket_list = Options.KickTrinketList and Options.KickTrinketList.Value or {},
                     stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false,
@@ -13347,6 +13348,22 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                     trinket_bot.pending_artifact_logs = {}
                 end
+
+                -- Wait for the character to actually settle (grounded, not mid-jump/
+                -- mid-transit toward wherever it was headed) before menuing out -
+                -- yanking the bot mid-movement can strand it airborne or cut off a
+                -- move that hadn't finished. Capped so a genuinely stuck-in-air
+                -- situation (e.g. falling into water) doesn't block the hop forever.
+                pcall(function()
+                    local char = plr.Character
+                    local hum = char and FindFirstChildOfClass(char, "Humanoid")
+                    if hum then
+                        local gt0 = os.clock()
+                        while hum.Parent and (os.clock() - gt0) < 4 and InAir() do
+                            task.wait(0.1)
+                        end
+                    end
+                end)
 
                 local serverhop_success = false
                 if InAir() then
@@ -13615,6 +13632,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
             local currently_dropping = false
             local droppedTools = {}
+            local usedTools = {}
 
             function ExecutePath(test_mode)
                 if not cheat_client or not cheat_client.config then
@@ -13625,6 +13643,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 trinket_bot.test_mode = test_mode
 
                 droppedTools = {}
+                usedTools = {}
                 currently_dropping = false
 
                 local serverhop_count = 0
@@ -16677,6 +16696,23 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Tooltip = "Select items to automatically drop during botting"
             })
 
+            group_trinket_bot:AddLabel("Auto Use Items")
+            group_trinket_bot:AddDropdown("AutoUseItems", {
+                Text = "Auto Use",
+                Values = {
+                    "Scroll of Trahere",
+                    "Scroll of Telorum",
+                    "Scroll of Fimbulvetr",
+                    "Scroll of Percutiens",
+                    "Scroll of Hoppa",
+                    "Scroll of Snarvindur",
+                    "Scroll of Manus Dei"
+                },
+                Multi = true,
+                Default = {},
+                Tooltip = "Select scrolls to actually USE when picked up, instead of dropping them. Takes priority over Auto Drop if an item is in both lists."
+            })
+
             group_trinket_bot:AddSlider("ProximityCheck", {
                 Text = "Proximity Check (studs)",
                 Default = 0,
@@ -16783,6 +16819,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 if Toggles.JoinOldestServer then Toggles.JoinOldestServer:SetValue(settings.join_oldest_server or false) end
                 if Toggles.AutoPopPDs then Toggles.AutoPopPDs:SetValue(settings.auto_pop_pds or false) end
                 if Options.AutoDropItems then Options.AutoDropItems:SetValue(settings.auto_drop_items or {}) end
+                if Options.AutoUseItems then Options.AutoUseItems:SetValue(settings.auto_use_items or {}) end
                 if Toggles.KickOnTrinket then Toggles.KickOnTrinket:SetValue(settings.kick_on_trinket or false) end
                 if Options.KickTrinketList then Options.KickTrinketList:SetValue(settings.kick_trinket_list or {}) end
                 if Toggles.StayInServer then Toggles.StayInServer:SetValue(settings.stay_in_server or false) end
@@ -17713,6 +17750,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             join_oldest_server = Toggles.JoinOldestServer and Toggles.JoinOldestServer.Value or false,
                             auto_pop_pds = Toggles.AutoPopPDs and Toggles.AutoPopPDs.Value or false,
                             auto_drop_items = Options.AutoDropItems and Options.AutoDropItems.Value or {},
+                    auto_use_items = Options.AutoUseItems and Options.AutoUseItems.Value or {},
                             kick_on_trinket = Toggles.KickOnTrinket and Toggles.KickOnTrinket.Value or false,
                             kick_trinket_list = Options.KickTrinketList and Options.KickTrinketList.Value or {},
                             stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false,
@@ -17867,6 +17905,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         end
                         quantity_connections = {}
                         droppedTools = {}
+                        usedTools = {}
 
                         visited_positions = {}
 
@@ -18246,6 +18285,87 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 end
             end
 
+            -- Auto Use: actually consumes selected scrolls when picked up, instead of
+            -- dropping them. Separate from drop_item's own should_try_use fallback
+            -- (which only tries a use as a nicety before dropping regardless of
+            -- outcome) - this never drops the item, so a failed/on-cooldown use just
+            -- leaves it sitting in the Backpack for the next pickup event to retry.
+            local function use_item(item)
+                if not (mem:HasItem("botstarted") and mem:GetItem("botstarted") == "true") then
+                    return
+                end
+
+                if not plr.Character or not plr.Character:FindFirstChild("Humanoid") then
+                    return
+                end
+
+                while currently_dropping do
+                    task.wait(0.1)
+                end
+                currently_dropping = true
+
+                if usedTools[item.Name] then
+                    currently_dropping = false
+                    return
+                end
+                usedTools[item.Name] = true
+
+                local character = plr.Character
+                if character and character:FindFirstChild("Humanoid") then
+                    local equip_success = pcall(function()
+                        character.Humanoid:EquipTool(item)
+                    end)
+
+                    if not equip_success then
+                        usedTools[item.Name] = nil
+                        currently_dropping = false
+                        return
+                    end
+
+                    local start_time = tick()
+                    local timeout = 3
+                    while item.Parent ~= character and (tick() - start_time) < timeout do
+                        task.wait(0.1)
+                    end
+
+                    if item.Parent ~= character then
+                        usedTools[item.Name] = nil
+                        currently_dropping = false
+                        return
+                    end
+
+                    library:Notify(string.format("Auto-using %s...", item.Name))
+                    task.wait(0.1)
+
+                    task.spawn(function()
+                        if vim then
+                            vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                            task.wait(math.random(1, 15) / 1000)
+                            vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                        end
+                    end)
+
+                    if utility and utility.LeftClick then
+                        utility:LeftClick()
+                    end
+
+                    task.wait(0.5)
+
+                    if not item or not item.Parent or (item.Parent ~= character and item.Parent ~= plr.Backpack) then
+                        library:Notify(string.format("Used %s successfully!", item.Name))
+                    else
+                        library:Notify(string.format("Couldn't use %s yet (on cooldown?) - left in Backpack, will retry next pickup", item.Name))
+                    end
+
+                    local item_name = item.Name
+                    task.delay(2, function()
+                        usedTools[item_name] = nil
+                    end)
+                end
+
+                currently_dropping = false
+            end
+
             local function setup_backpack_monitoring()
                 if auto_drop_backpack_connection then
                     auto_drop_backpack_connection:Disconnect()
@@ -18292,8 +18412,22 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     for _, item in ipairs(backpack:GetChildren()) do
                         if item then
                             local success, is_tool = pcall(function() return item:IsA("Tool") end)
-                            if success and is_tool and not droppedTools[item.Name] then
-                                task.spawn(drop_item, item)
+                            if success and is_tool then
+                                local use_selected = Options.AutoUseItems and Options.AutoUseItems.Value or {}
+                                local should_use = false
+                                for dropdown_name, enabled in pairs(use_selected) do
+                                    if enabled and item.Name:gsub(" ", "") == dropdown_name:gsub(" ", "") then
+                                        should_use = true
+                                        break
+                                    end
+                                end
+                                if should_use then
+                                    if not usedTools[item.Name] then
+                                        task.spawn(use_item, item)
+                                    end
+                                elseif not droppedTools[item.Name] then
+                                    task.spawn(drop_item, item)
+                                end
                             end
                         end
                     end
@@ -25216,7 +25350,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 251 loaded - Knock Yourself now fires (0, 1) to actually knock you down instead of a light damage tick", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 252 loaded - Trinket Bot now waits to land before menuing out to serverhop, and Auto Use Items lets you pick scrolls to actually use instead of drop", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
