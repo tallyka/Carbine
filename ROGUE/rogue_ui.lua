@@ -25519,7 +25519,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 271 loaded - Charge Mana + Attack now punches bare-fisted for up to 1 minute first (no mana to charge yet at the start) before starting the normal charge/punch cycle", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 272 loaded - Charge Mana + Attack now walks back to point 449 if enemies are still there after the 1 minute fist-only phase, instead of starting the charge/punch cycle anyway", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31775,6 +31775,27 @@ end
                                         task.wait(0.3)
                                     end
 
+                                    -- still enemies after a full minute of unmanaed fists - this
+                                    -- spot isn't clearing on its own. Walk back to point 449
+                                    -- instead of grinding here forever; the path naturally walks
+                                    -- forward again afterward, so it comes right back to this same
+                                    -- Charge Mana + Attack waypoint and retries.
+                                    if not cleared and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                        and shared and not shared.is_unloading then
+                                        library:Notify("Path: still enemies here after 1 min - walking back to point 449", 6)
+                                        for j = i, 449, -1 do
+                                            if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                                and shared and not shared.is_unloading) then break end
+                                            local ps = xp_path[j]
+                                            if ps and ps.cf and ps.kind ~= "return" then
+                                                bot_move_to(ps.cf.Position)
+                                            end
+                                        end
+                                        i = 449
+                                        jumped = true
+                                        goto mana_attack_done
+                                    end
+
                                     while Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                         and shared and not shared.is_unloading
                                         and (os.clock() - mt0) < cap and not cleared do
@@ -31819,6 +31840,7 @@ end
                                             task.wait(0.3)
                                         end
                                     end
+                                    ::mana_attack_done::
                                 else
                                     local dwell = 0
                                     while dwell < wait_s
