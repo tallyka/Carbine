@@ -18503,26 +18503,47 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     end
 
                     library:Notify(string.format("Auto-using %s...", item.Name))
-                    task.wait(0.1)
+                    -- give the equip time to actually land server-side first - clicking
+                    -- immediately after EquipTool can fire before the server has
+                    -- processed the equip, so the click gets silently ignored even
+                    -- though the tool is already visibly held client-side.
+                    task.wait(0.3)
 
-                    task.spawn(function()
-                        if vim then
-                            vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-                            task.wait(math.random(1, 15) / 1000)
-                            vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                    local used = false
+                    for attempt = 1, 3 do
+                        if not item or not item.Parent or (item.Parent ~= character and item.Parent ~= plr.Backpack) then
+                            used = true
+                            break
                         end
-                    end)
 
-                    if utility and utility.LeftClick then
-                        utility:LeftClick()
+                        pcall(function()
+                            if item.Activate then item:Activate() end
+                        end)
+
+                        task.spawn(function()
+                            if vim then
+                                vim:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+                                task.wait(math.random(1, 15) / 1000)
+                                vim:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+                            end
+                        end)
+
+                        if utility and utility.LeftClick then
+                            utility:LeftClick()
+                        end
+
+                        task.wait(0.4)
+
+                        if not item or not item.Parent or (item.Parent ~= character and item.Parent ~= plr.Backpack) then
+                            used = true
+                            break
+                        end
                     end
 
-                    task.wait(0.5)
-
-                    if not item or not item.Parent or (item.Parent ~= character and item.Parent ~= plr.Backpack) then
+                    if used then
                         library:Notify(string.format("Used %s successfully!", item.Name))
                     else
-                        library:Notify(string.format("Couldn't use %s yet (on cooldown?) - left in Backpack, will retry next pickup", item.Name))
+                        library:Notify(string.format("Couldn't use %s after 3 tries (on cooldown?) - left in Backpack, will retry next pickup", item.Name))
                     end
 
                     local item_name = item.Name
@@ -25518,7 +25539,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 261 loaded - Hold Perflora and Hold Pebble now save/load with the running path's settings", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 262 loaded - Auto Use now waits longer after equipping and retries the click up to 3 times (was firing before the equip landed server-side)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
