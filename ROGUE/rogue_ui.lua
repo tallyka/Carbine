@@ -12546,6 +12546,19 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                 end
                             end
                         end
+                    else
+                        -- restore normal collision - the RenderStepped loop above force-
+                        -- disables CanCollide on every BasePart (including
+                        -- HumanoidRootPart) for the whole tween so it can glide smoothly.
+                        -- If this never gets turned back on - whether the tween finished
+                        -- normally or got cancelled early (path_running going false, an
+                        -- emergency gate, etc.) - gravity takes over with no floor able to
+                        -- catch you and you fall straight through the map.
+                        for _, part in ipairs(character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = true
+                            end
+                        end
                     end
                 end
 
@@ -25475,7 +25488,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 258 loaded - Trinket Bot no longer kicks on death - it waits for respawn and resumes the path from the nearest point instead", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 259 loaded - Fixed SmoothTeleport leaving your character permanently noclipped (CanCollide never restored) - was causing fall-through-the-map after any stopped/cancelled move", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
