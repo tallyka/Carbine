@@ -25589,7 +25589,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 267 loaded - Cleaned up the Artifact Found webhook embed too (proper fields instead of a cramped description)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 268 loaded - Potion gather loop no longer stops the bot dead after 30 failed attempts - it gives up on that batch and continues forward so it can reach the inn instead of being stuck", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31184,11 +31184,15 @@ end
                                         elseif back_to then
                                             -- exceeded 30 retries without ever reaching the target -
                                             -- something is stuck (likely fighting the far-target
-                                            -- reroute). STOP rather than spin forever or skip ahead;
-                                            -- progress stays saved so a manual restart continues here.
-                                            library:Notify(("Path: STOPPED - %d attempts to reach %d %s, still stuck at %d - something's wrong (check the gather loop's location), not skipping ahead"):format(retries, want, pot, total_progress), 15)
-                                            if Toggles.xpfarm_path_run then Toggles.xpfarm_path_run:SetValue(false) end
-                                            break
+                                            -- reroute) and retrying here again clearly isn't going to
+                                            -- fix itself. Stopping the bot dead used to be the response,
+                                            -- but that just strands it at the exact spot it's already
+                                            -- failing at instead of letting it reach the inn a little
+                                            -- further ahead where it can actually recover - so give up
+                                            -- on this batch and continue forward instead.
+                                            library:Notify(("Path: gave up on %s after %d attempts (stuck at %d/%d) - continuing on to the next point instead of stopping"):format(pot, retries, total_progress, want), 10)
+                                            pcall(function() mem:RemoveItem(progress_key) end)
+                                            pcall(function() mem:RemoveItem(retry_key) end)
                                         else
                                             -- no ingredient loop exists before this waypoint at all
                                             -- (a structural path issue, not a materials shortage) -
