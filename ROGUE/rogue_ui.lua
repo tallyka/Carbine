@@ -13231,45 +13231,46 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         local seconds = math.floor(elapsed_time % 60)
 
                         local items_text = ""
+                        local item_count = 0
                         if trinket_bot.session_loot and next(trinket_bot.session_loot) then
                             local items = {}
                             for item_name, count in pairs(trinket_bot.session_loot) do
                                 table.insert(items, {name = item_name, count = count})
+                                item_count = item_count + 1
                             end
                             table.sort(items, function(a, b) return a.count > b.count end)
+                            local lines = {}
                             for _, item in ipairs(items) do
-                                items_text = items_text .. string.format("%dx %s\n", item.count, item.name)
+                                table.insert(lines, string.format("• **%dx** %s", item.count, item.name))
                             end
+                            items_text = table.concat(lines, "\n")
                         else
-                            items_text = "No items collected"
+                            items_text = "*Nothing collected yet*"
                         end
 
                         local player_count = #plrs:GetPlayers()
                         local footer_text
                         if cheat_client.config.webhook_show_username ~= false then
-                            footer_text = string.format("Players: %d/23 | %s | Job: %s", player_count, plr.Name, game.JobId)
+                            footer_text = string.format("Carbine • %s • %d/23 players • Job %s", plr.Name, player_count, game.JobId)
                         else
-                            footer_text = string.format("Players: %d/23 | Job: %s", player_count, game.JobId)
+                            footer_text = string.format("Carbine • %d/23 players • Job %s", player_count, game.JobId)
                         end
 
-                        local description = string.format(
-                            "**Server:** `%s (%s)`\n**Inventory Value:** %d\n**Session:** %dh %dm %ds",
-                            serverName ~= "" and serverName or "Unknown",
-                            serverRegion ~= "" and serverRegion or "Unknown",
-                            get_inventory_value(),
-                            hours, minutes, seconds
-                        )
+                        -- calmer green for a routine hop, orange for anything danger/player-triggered -
+                        -- gives an at-a-glance read on WHY it hopped without reading the title
+                        local is_urgent = reason and (reason:lower():find("danger") or reason:lower():find("critical")
+                            or reason:lower():find("player") or reason:lower():find("close"))
+                        local embed_color = is_urgent and 0xFF9F43 or 0x2ECC71
 
                         local embed = {
-                            title = string.format("Serverhop #%d | %s", current_count + 1, reason),
-                            description = description,
-                            color = 0x36ff79,
+                            title = string.format("🔁 Serverhop #%d", current_count + 1),
+                            description = string.format("**%s**", reason),
+                            color = embed_color,
                             fields = {
-                                {
-                                    name = "Items Collected",
-                                    value = string.format("```\n%s```", items_text),
-                                    inline = false
-                                }
+                                { name = "🌐 Server", value = string.format("%s (%s)", serverName ~= "" and serverName or "Unknown", serverRegion ~= "" and serverRegion or "Unknown"), inline = true },
+                                { name = "⏱️ Session", value = string.format("%dh %dm %ds", hours, minutes, seconds), inline = true },
+                                { name = "💰 Value", value = tostring(get_inventory_value()), inline = true },
+                                { name = string.format("🎒 Items Collected (%d)", item_count), value = items_text, inline = false }
                             },
                             footer = {
                                 text = footer_text
@@ -25589,7 +25590,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 265 loaded - Trinket Bot now tracks and displays a running death count for the whole session (persists across serverhops/respawns until you stop the bot)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 266 loaded - Cleaned up the Trinket Bot serverhop webhook embed (proper fields instead of a cramped description, readable item list, color reflects normal vs danger hop)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
