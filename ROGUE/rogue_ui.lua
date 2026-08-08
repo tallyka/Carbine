@@ -25562,7 +25562,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 263 loaded - Fixed ping threshold never triggering serverhop - was reading the wrong Stats metric (PerformanceStats.Ping instead of the real Network Data Ping)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 264 loaded - XP Farm's serverhop now goes through the menu first (like Trinket Bot) before hopping, for lower ban risk - keeps the same freeze-safe JoinPublicServer hop logic underneath", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -29965,6 +29965,25 @@ end
                     library:Notify("Hop: found no servers this pass - will retry shortly", 5)
                     return
                 end
+
+                -- Same "go through the menu" safety Trinket Bot's serverhop uses (lower ban
+                -- risk than a raw in-place teleport): wait for the character to actually
+                -- settle (grounded, not mid-jump) before menuing out, then invoke
+                -- ReturnToMenu. Only done once we know there's actually a candidate to join,
+                -- so we don't menu out for nothing.
+                pcall(function()
+                    local char = plr.Character
+                    local hum = char and FindFirstChildOfClass(char, "Humanoid")
+                    if hum then
+                        local gt0 = os.clock()
+                        while hum.Parent and (os.clock() - gt0) < 4
+                            and hum:GetState() ~= Enum.HumanoidStateType.Running do
+                            task.wait(0.1)
+                        end
+                    end
+                end)
+                pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
+
                 -- A REAL teleport reloads the whole script, so a successful hop simply never
                 -- returns from this function. We therefore NEVER "assume success" on a quiet server
                 -- (that false positive - the same bug as utility:Serverhop's "no failure in 20s =
