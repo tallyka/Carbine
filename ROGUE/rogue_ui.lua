@@ -25452,36 +25452,35 @@ end
                             local server_name, server_region = get_server_info()
                             local webhook_msg = string.format("@here")
 
-                            local description = string.format("**Artifact%s:** %s\n",
-                                #artifact_names > 1 and "s" or "",
-                                artifact_list
-                            )
+                            local fields = {
+                                { name = string.format("🎯 Artifact%s", #artifact_names > 1 and "s" or ""), value = artifact_list .. (area ~= "None" and string.format(" (%s)", area) or ""), inline = false }
+                            }
 
                             if bot_running and nearest_point_index then
-                                description = description .. string.format("**Path:** %s\n", path_name)
-                                description = description .. string.format("**Point:** %d (%.0f studs)\n", nearest_point_index, nearest_point_distance)
+                                table.insert(fields, { name = "🗺️ Path", value = path_name, inline = true })
+                                table.insert(fields, { name = "📍 Nearest Point", value = string.format("#%d (%.0f studs)", nearest_point_index, nearest_point_distance), inline = true })
                             end
 
-                            description = description .. string.format("**Server:** `%s (%s)`\n\n",
-                                server_name ~= "" and server_name or "Unknown",
-                                server_region ~= "" and server_region or "Unknown"
-                            )
+                            table.insert(fields, { name = "🌐 Server", value = string.format("%s (%s)", server_name ~= "" and server_name or "Unknown", server_region ~= "" and server_region or "Unknown"), inline = true })
 
-                            description = description .. string.format("> Castle Rock: %s\n", get_last_looted("cr"))
-                            description = description .. string.format("> Sunken: %s\n", get_last_looted("deepsunken"))
-                            description = description .. string.format("> Temple of Fire: %s", get_last_looted("temple"))
+                            table.insert(fields, {
+                                name = "⏳ Last Looted",
+                                value = string.format("• Castle Rock: %s\n• Sunken: %s\n• Temple of Fire: %s",
+                                    get_last_looted("cr"), get_last_looted("deepsunken"), get_last_looted("temple")),
+                                inline = false
+                            })
 
                             local footer_text
                             if cheat_client.config.webhook_show_username ~= false then
-                                footer_text = string.format("Players: %d/23 | %s | Job: %s", player_count, plr.Name, game.JobId)
+                                footer_text = string.format("Carbine • %s • %d/23 players • Job %s", plr.Name, player_count, game.JobId)
                             else
-                                footer_text = string.format("Players: %d/23 | Job: %s", player_count, game.JobId)
+                                footer_text = string.format("Carbine • %d/23 players • Job %s", player_count, game.JobId)
                             end
 
                             local embed = {
-                                title = string.format("%s%s | ARTIFACT FOUND", artifact_list, area_text),
-                                description = description,
+                                title = "✨ Artifact Found",
                                 color = 0xff3679,
+                                fields = fields,
                                 thumbnail = {
                                     url = "https://static.wikia.nocookie.net/rogue-lineage/images/d/d8/PhiloRender.png/revision/latest?cb=20251012003300"
                                 },
@@ -25590,7 +25589,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 266 loaded - Cleaned up the Trinket Bot serverhop webhook embed (proper fields instead of a cramped description, readable item list, color reflects normal vs danger hop)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 267 loaded - Cleaned up the Artifact Found webhook embed too (proper fields instead of a cramped description)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
