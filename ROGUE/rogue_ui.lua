@@ -16811,9 +16811,33 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                 end
                             end
                         end
+
+                        if Toggles.HoldPebble and Toggles.HoldPebble.Value and plr.Character then
+                            local char = plr.Character
+                            local hum = FindFirstChildOfClass(char, "Humanoid")
+                            local backpack = plr:FindFirstChildOfClass("Backpack")
+
+                            if hum and hum.Health > 0 and backpack and not cs:HasTag(char, "Knocked") and not trinket_bot.gating then
+                                local held = FindFirstChildOfClass(char, "Tool")
+
+                                if not held or held.Name ~= "Idol of War" then
+                                    local pebble = (held and held.Name == "Pebble") and held or FindFirstChild(backpack, "Pebble")
+
+                                    if pebble and held ~= pebble then
+                                        pcall(function() hum:EquipTool(pebble) end)
+                                    end
+                                end
+                            end
+                        end
                     end
                 end)
             end
+
+            group_trinket_bot:AddToggle("HoldPebble", {
+                Text = "Hold Pebble",
+                Default = false,
+                Tooltip = "Keeps Pebble equipped at all times (no mana charging - purely so other bots see it held and serverhop away). Steps aside for Gate (won't fight the Gate tool while gating) and re-holds Pebble afterward."
+            })
 
             group_trinket_bot:AddLabel("Auto Drop Items")
             group_trinket_bot:AddDropdown("AutoDropItems", {
@@ -25488,7 +25512,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 259 loaded - Fixed SmoothTeleport leaving your character permanently noclipped (CanCollide never restored) - was causing fall-through-the-map after any stopped/cancelled move", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 260 loaded - Added Hold Pebble toggle (same as Hold Perflora, for non-Druid classes)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
