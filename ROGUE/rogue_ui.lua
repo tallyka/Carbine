@@ -25519,7 +25519,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 272 loaded - Charge Mana + Attack now walks back to point 449 if enemies are still there after the 1 minute fist-only phase, instead of starting the charge/punch cycle anyway", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 273 loaded - Fixed a hub load failure from BUILD 272 (goto/label wasn't compiling) - same walk-back-to-449 behavior, now using a plain flag instead", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31780,6 +31780,7 @@ end
                                     -- instead of grinding here forever; the path naturally walks
                                     -- forward again afterward, so it comes right back to this same
                                     -- Charge Mana + Attack waypoint and retries.
+                                    local retreated = false
                                     if not cleared and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                         and shared and not shared.is_unloading then
                                         library:Notify("Path: still enemies here after 1 min - walking back to point 449", 6)
@@ -31793,10 +31794,10 @@ end
                                         end
                                         i = 449
                                         jumped = true
-                                        goto mana_attack_done
+                                        retreated = true
                                     end
 
-                                    while Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                    while not retreated and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                         and shared and not shared.is_unloading
                                         and (os.clock() - mt0) < cap and not cleared do
                                         -- CHARGE PHASE: exactly 4s, or until mana's actually topped up
@@ -31840,7 +31841,6 @@ end
                                             task.wait(0.3)
                                         end
                                     end
-                                    ::mana_attack_done::
                                 else
                                     local dwell = 0
                                     while dwell < wait_s
