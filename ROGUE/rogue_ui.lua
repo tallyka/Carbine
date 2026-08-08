@@ -2718,9 +2718,19 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
         -- should abort starting), false if ping is fine (safe to proceed).
         function utility:CheckPingAndHop(reason, threshold)
             threshold = threshold or 1000
+            -- Network.ServerStatsItem["Data Ping"] is the real round-trip network
+            -- ping (what Roblox's own debug stats overlay calls "Data Ping").
+            -- PerformanceStats.Ping is a different, rendering/heartbeat-based metric
+            -- that stays low even when actual network ping is high - using it here
+            -- meant this threshold basically never triggered.
             local ok, ping = pcall(function()
-                return Services.Stats:WaitForChild('PerformanceStats'):WaitForChild('Ping'):GetValue()
+                return Services.Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
             end)
+            if not ok or not ping then
+                ok, ping = pcall(function()
+                    return Services.Stats:WaitForChild('PerformanceStats'):WaitForChild('Ping'):GetValue()
+                end)
+            end
             if ok and ping and ping > threshold then
                 if library and library.Notify then
                     library:Notify(string.format("Ping is %dms (over %d) - serverhopping before starting %s", math.floor(ping), threshold, reason or "the bot"), 6)
@@ -25539,7 +25549,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 262 loaded - Auto Use now waits longer after equipping and retries the click up to 3 times (was firing before the equip landed server-side)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 263 loaded - Fixed ping threshold never triggering serverhop - was reading the wrong Stats metric (PerformanceStats.Ping instead of the real Network Data Ping)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
