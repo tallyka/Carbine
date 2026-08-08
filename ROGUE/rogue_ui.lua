@@ -25589,7 +25589,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 268 loaded - Potion gather loop no longer stops the bot dead after 30 failed attempts - it gives up on that batch and continues forward so it can reach the inn instead of being stuck", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 269 loaded - Potion gather retry cap lowered from 30 to 5 attempts before giving up and continuing forward", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31119,7 +31119,7 @@ end
                                     if want > 0 and not hit_target and total_progress < want then
                                         -- ran out of materials (or timed out) before reaching the
                                         -- target - go back and gather more instead of moving past
-                                        -- this waypoint with a short batch. Capped at 30 attempts:
+                                        -- this waypoint with a short batch. Capped at 5 attempts:
                                         -- an uncapped version of this (nothing stopping it) got
                                         -- stuck ping-ponging against the far-target reroute forever
                                         -- (10000+ attempts, never actually gathering anything) - a
@@ -31163,9 +31163,9 @@ end
                                                 end
                                             end
                                         end
-                                        if back_to and retries <= 30 then
+                                        if back_to and retries <= 5 then
                                             pcall(function() mem:SetItem(retry_key, tostring(retries)) end)
-                                            library:Notify(("Path: only %d/%d %s made - not enough materials, walking back to gather more (attempt %d/30)"):format(total_progress, want, pot, retries), 6)
+                                            library:Notify(("Path: only %d/%d %s made - not enough materials, walking back to gather more (attempt %d/5)"):format(total_progress, want, pot, retries), 6)
                                             -- physically retrace the recorded points back to the
                                             -- gather loop instead of jumping the array index straight
                                             -- there - a raw jump leaves the NEXT step's target far
