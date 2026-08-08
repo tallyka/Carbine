@@ -13178,6 +13178,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     auto_pop_pds = Toggles.AutoPopPDs and Toggles.AutoPopPDs.Value or false,
                     auto_drop_items = Options.AutoDropItems and Options.AutoDropItems.Value or {},
                     auto_use_items = Options.AutoUseItems and Options.AutoUseItems.Value or {},
+                    hold_perflora = Toggles.HoldPerflora and Toggles.HoldPerflora.Value or false,
+                    hold_pebble = Toggles.HoldPebble and Toggles.HoldPebble.Value or false,
                     kick_on_trinket = Toggles.KickOnTrinket and Toggles.KickOnTrinket.Value or false,
                     kick_trinket_list = Options.KickTrinketList and Options.KickTrinketList.Value or {},
                     stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false,
@@ -16982,6 +16984,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 if Toggles.AutoPopPDs then Toggles.AutoPopPDs:SetValue(settings.auto_pop_pds or false) end
                 if Options.AutoDropItems then Options.AutoDropItems:SetValue(settings.auto_drop_items or {}) end
                 if Options.AutoUseItems then Options.AutoUseItems:SetValue(settings.auto_use_items or {}) end
+                if Toggles.HoldPerflora then Toggles.HoldPerflora:SetValue(settings.hold_perflora or false) end
+                if Toggles.HoldPebble then Toggles.HoldPebble:SetValue(settings.hold_pebble or false) end
                 if Toggles.KickOnTrinket then Toggles.KickOnTrinket:SetValue(settings.kick_on_trinket or false) end
                 if Options.KickTrinketList then Options.KickTrinketList:SetValue(settings.kick_trinket_list or {}) end
                 if Toggles.StayInServer then Toggles.StayInServer:SetValue(settings.stay_in_server or false) end
@@ -17913,6 +17917,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             auto_pop_pds = Toggles.AutoPopPDs and Toggles.AutoPopPDs.Value or false,
                             auto_drop_items = Options.AutoDropItems and Options.AutoDropItems.Value or {},
                     auto_use_items = Options.AutoUseItems and Options.AutoUseItems.Value or {},
+                    hold_perflora = Toggles.HoldPerflora and Toggles.HoldPerflora.Value or false,
+                    hold_pebble = Toggles.HoldPebble and Toggles.HoldPebble.Value or false,
                             kick_on_trinket = Toggles.KickOnTrinket and Toggles.KickOnTrinket.Value or false,
                             kick_trinket_list = Options.KickTrinketList and Options.KickTrinketList.Value or {},
                             stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false,
@@ -25512,7 +25518,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 260 loaded - Added Hold Pebble toggle (same as Hold Perflora, for non-Druid classes)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 261 loaded - Hold Perflora and Hold Pebble now save/load with the running path's settings", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
