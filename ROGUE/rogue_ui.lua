@@ -13830,6 +13830,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if not mem:HasItem("serverhop_count") then
                         mem:SetItem("serverhop_count", "0")
                     end
+                    if not mem:HasItem("death_count") then
+                        mem:SetItem("death_count", "0")
+                    end
 
                     if trinket_bot.current_path_name and trinket_bot.current_path_name ~= "" then
                         mem:SetItem("trinket_bot_path", trinket_bot.current_path_name)
@@ -13855,8 +13858,15 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             end
 
                             trinket_bot.path_running = false
-                            pcall(function() library:Notify("Died - waiting for respawn to resume from nearest point") end)
-                            pcall(function() utility:plain_webhook("@here bot died - resuming from nearest point after respawn") end)
+
+                            local death_total = 0
+                            pcall(function()
+                                death_total = (tonumber(mem:GetItem("death_count")) or 0) + 1
+                                mem:SetItem("death_count", tostring(death_total))
+                            end)
+
+                            pcall(function() library:Notify(string.format("Died (#%d this run) - waiting for respawn to resume from nearest point", death_total)) end)
+                            pcall(function() utility:plain_webhook(string.format("@here bot died (#%d this run) - resuming from nearest point after respawn", death_total)) end)
 
                             -- no more kicking on death - wait for the automatic respawn, then
                             -- find the closest path point to wherever we land and resume from
@@ -16863,6 +16873,23 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Default = false,
                 Tooltip = "Keeps Pebble equipped at all times (no mana charging - purely so other bots see it held and serverhop away). Steps aside for Gate (won't fight the Gate tool while gating) and re-holds Pebble afterward."
             })
+
+            -- Death counter: persists across serverhops/respawns for the whole run (via
+            -- mem, same storage the resume/serverhop counters already use), reset only
+            -- when a genuinely fresh (non-test-mode) path start initializes it. Just a
+            -- live label - the actual counting happens in the death_connection handler.
+            do
+                local death_count_label = group_trinket_bot:AddLabel("death_count_lbl", { Text = "Deaths this run: 0", DoesWrap = true })
+                task.spawn(function()
+                    while shared and not shared.is_unloading do
+                        task.wait(1)
+                        pcall(function()
+                            local n = tonumber(mem:GetItem("death_count")) or 0
+                            death_count_label:SetText(string.format("Deaths this run: %d", n))
+                        end)
+                    end
+                end)
+            end
 
             group_trinket_bot:AddLabel("Auto Drop Items")
             group_trinket_bot:AddDropdown("AutoDropItems", {
@@ -25562,7 +25589,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 264 loaded - XP Farm's serverhop now goes through the menu first (like Trinket Bot) before hopping, for lower ban risk - keeps the same freeze-safe JoinPublicServer hop logic underneath", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 265 loaded - Trinket Bot now tracks and displays a running death count for the whole session (persists across serverhops/respawns until you stop the bot)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
