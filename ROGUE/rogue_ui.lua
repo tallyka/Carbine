@@ -13218,78 +13218,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     mem:SetItem("trinket_bot_settings", httpService:JSONEncode(settings_to_save))
                 end)
 
-                if reason and utility then
-                    local boiii = reason:lower():find("repeat encounter") or reason:lower():find("unfriendly player")
-
-                    if boiii then
-                        utility:plain_webhook(reason)
-                    else
-                        local serverName, serverRegion = get_server_info()
-                        local elapsed_time = os.clock() - trinket_bot.session_start_time
-                        local hours = math.floor(elapsed_time / 3600)
-                        local minutes = math.floor((elapsed_time % 3600) / 60)
-                        local seconds = math.floor(elapsed_time % 60)
-
-                        local items_text = ""
-                        local item_count = 0
-                        if trinket_bot.session_loot and next(trinket_bot.session_loot) then
-                            local items = {}
-                            for item_name, count in pairs(trinket_bot.session_loot) do
-                                table.insert(items, {name = item_name, count = count})
-                                item_count = item_count + 1
-                            end
-                            table.sort(items, function(a, b) return a.count > b.count end)
-                            local lines = {}
-                            for _, item in ipairs(items) do
-                                table.insert(lines, string.format("• **%dx** %s", item.count, item.name))
-                            end
-                            items_text = table.concat(lines, "\n")
-                        else
-                            items_text = "*Nothing collected yet*"
-                        end
-
-                        local player_count = #plrs:GetPlayers()
-                        local footer_text
-                        if cheat_client.config.webhook_show_username ~= false then
-                            footer_text = string.format("Carbine • %s • %d/23 players • Job %s", plr.Name, player_count, game.JobId)
-                        else
-                            footer_text = string.format("Carbine • %d/23 players • Job %s", player_count, game.JobId)
-                        end
-
-                        -- calmer green for a routine hop, orange for anything danger/player-triggered -
-                        -- gives an at-a-glance read on WHY it hopped without reading the title
-                        local is_urgent = reason and (reason:lower():find("danger") or reason:lower():find("critical")
-                            or reason:lower():find("player") or reason:lower():find("close"))
-                        local embed_color = is_urgent and 0xFF9F43 or 0x2ECC71
-
-                        local embed = {
-                            title = string.format("🔁 Serverhop #%d", current_count + 1),
-                            description = string.format("**%s**", reason),
-                            color = embed_color,
-                            fields = {
-                                { name = "🌐 Server", value = string.format("%s (%s)", serverName ~= "" and serverName or "Unknown", serverRegion ~= "" and serverRegion or "Unknown"), inline = true },
-                                { name = "⏱️ Session", value = string.format("%dh %dm %ds", hours, minutes, seconds), inline = true },
-                                { name = "💰 Value", value = tostring(get_inventory_value()), inline = true },
-                                { name = string.format("🎒 Items Collected (%d)", item_count), value = items_text, inline = false }
-                            },
-                            footer = {
-                                text = footer_text
-                            },
-                            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-                        }
-
-                        if cheat_client.config.webhook and cheat_client.config.webhook ~= "" then
-                            task.spawn(function()
-                                pcall(function()
-                                    HXD_SEND_WEBHOOK(cheat_client.config.webhook, {
-                                        username = cheat_client.config.webhook_username or "bladee",
-                                        embeds = {embed}
-                                    })
-                                end)
-                            end)
-                        end
-                    end
-                end
+                -- [Carbine] Removed the per-serverhop webhook notification (was firing a
+                -- Discord embed/plain message on every single hop, reason and all).
 
                 if not shared.on_teleport_setup then
                     shared.on_teleport_setup = true
@@ -25589,7 +25519,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 269 loaded - Potion gather retry cap lowered from 30 to 5 attempts before giving up and continuing forward", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 270 loaded - Removed the per-serverhop webhook notification (was firing every single hop)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
