@@ -25519,7 +25519,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 270 loaded - Removed the per-serverhop webhook notification (was firing every single hop)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 271 loaded - Charge Mana + Attack now punches bare-fisted for up to 1 minute first (no mana to charge yet at the start) before starting the normal charge/punch cycle", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31749,6 +31749,32 @@ end
                                     local cap = (wait_s and wait_s >= 5) and wait_s or 120
                                     local mt0 = os.clock()
                                     local cleared = false
+
+                                    -- No mana yet at the very start, so charging first is wasted
+                                    -- time - attack bare-fisted for up to 1 minute BEFORE ever
+                                    -- trying to charge, then fall into the normal charge/punch
+                                    -- cycle below once there's actually a fight going.
+                                    library:Notify("Path: attacking (fists, no mana yet)...", 3)
+                                    local initial_t0 = os.clock()
+                                    while (os.clock() - initial_t0) < 60
+                                        and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                        and shared and not shared.is_unloading and not cleared do
+                                        if step.cf then
+                                            local hrp_now = local_hrp and local_hrp()
+                                            if hrp_now then
+                                                hrp_now.AssemblyLinearVelocity = Vector3.zero
+                                                if (hrp_now.Position - step.cf.Position).Magnitude > 4 then
+                                                    pcall(function()
+                                                        hrp_now.CFrame = CFrame.new(step.cf.Position, hrp_now.Position + hrp_now.CFrame.LookVector)
+                                                    end)
+                                                end
+                                            end
+                                        end
+                                        pcall(function() utility:LeftClick() end)
+                                        if scan_monsters(range) == 0 then cleared = true; break end
+                                        task.wait(0.3)
+                                    end
+
                                     while Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                         and shared and not shared.is_unloading
                                         and (os.clock() - mt0) < cap and not cleared do
