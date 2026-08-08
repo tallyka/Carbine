@@ -13817,21 +13817,71 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             end
 
                             trinket_bot.path_running = false
-                            pcall(function() library:Notify("Path stopped due to death") end)
+                            pcall(function() library:Notify("Died - waiting for respawn to resume from nearest point") end)
+                            pcall(function() utility:plain_webhook("@here bot died - resuming from nearest point after respawn") end)
 
-                            local stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false
-                            if test_mode then
-                                pcall(function() library:Notify("You died (test mode - not kicking)") end)
-                            elseif stay_in_server then
-                                pcall(function() library:Notify("You died (stay in server - not kicking)") end)
-                                pcall(function() utility:plain_webhook("@here bot died (stay in server mode)") end)
-                            else
-                                task.spawn(function()
-                                    pcall(function() utility:plain_webhook("@everyone bot died - kicking") end)
-                                    task.wait(0.3)
-                                    plr:Kick("bot died")
-                                end)
-                            end
+                            -- no more kicking on death - wait for the automatic respawn, then
+                            -- find the closest path point to wherever we land and resume from
+                            -- there, same "reorder path_points starting at closest index" trick
+                            -- already used for the post-serverhop resume logic.
+                            task.spawn(function()
+                                local dead_character = character
+                                local new_char = plr.Character
+                                if new_char == dead_character or not new_char then
+                                    new_char = nil
+                                    local conn
+                                    conn = plr.CharacterAdded:Connect(function(c)
+                                        new_char = c
+                                        if conn then conn:Disconnect() end
+                                    end)
+                                    local t0 = os.clock()
+                                    while not new_char and (os.clock() - t0) < 15 do
+                                        task.wait(0.1)
+                                    end
+                                    if conn then pcall(function() conn:Disconnect() end) end
+                                end
+
+                                if not new_char then
+                                    pcall(function() library:Notify("Respawn: no new character detected within 15s - cannot resume") end)
+                                    return
+                                end
+
+                                local hrp = new_char:WaitForChild("HumanoidRootPart", 10)
+                                task.wait(1)
+
+                                if not hrp then
+                                    pcall(function() library:Notify("Respawn: HumanoidRootPart not found - cannot resume") end)
+                                    return
+                                end
+
+                                local respawn_pos = hrp.Position
+                                local closest_point_index = 1
+                                local closest_distance = math.huge
+                                for idx, path_point in ipairs(trinket_bot.path_points) do
+                                    local dist = (respawn_pos - path_point.position).Magnitude
+                                    if dist < closest_distance then
+                                        closest_distance = dist
+                                        closest_point_index = idx
+                                    end
+                                end
+
+                                if closest_point_index > 1 then
+                                    local original_path = trinket_bot.path_points
+                                    local temp_path = {}
+                                    for i = closest_point_index, #original_path do
+                                        table.insert(temp_path, original_path[i])
+                                    end
+                                    for i = 1, closest_point_index - 1 do
+                                        table.insert(temp_path, original_path[i])
+                                    end
+                                    trinket_bot.path_points = temp_path
+                                end
+
+                                trinket_bot.skip_distance_check = true
+                                pcall(function() library:Notify(string.format("Resuming path after death (closest point %d, %.0f studs)", closest_point_index, closest_distance)) end)
+
+                                ExecutePath(test_mode)
+                            end)
                         end))
                     else
                         trinket_bot.path_running = false
@@ -25425,7 +25475,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 257 loaded - Fixed Hold Perflora never switching back after gating (Gate never unequipped itself, so it looked stuck) - now tracks a real gating flag instead of guessing from the held tool", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 258 loaded - Trinket Bot no longer kicks on death - it waits for respawn and resumes the path from the nearest point instead", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
