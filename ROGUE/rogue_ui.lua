@@ -16851,7 +16851,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     "Scroll of Hoppa",
                     "Scroll of Snarvindur",
                     "Scroll of Manus Dei",
-                    "Ice Essence"
+                    "Ice Essence",
+                    "Azael Horn"
                 },
                 Multi = true,
                 Default = {},
@@ -25519,7 +25520,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 273 loaded - Fixed a hub load failure from BUILD 272 (goto/label wasn't compiling) - same walk-back-to-449 behavior, now using a plain flag instead", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 274 loaded - Added Azael Horn to Auto Use Items", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
