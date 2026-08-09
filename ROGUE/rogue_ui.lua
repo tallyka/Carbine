@@ -25520,7 +25520,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 274 loaded - Added Azael Horn to Auto Use Items", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 275 loaded - Added smart_skill_skip: checks all 4 potion skills up front and jumps straight to the first segment actually missing one, instead of redoing segments already done", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -26596,6 +26596,8 @@ end
                         table.insert(steps, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
                     elseif step.kind == "skill_gate" then
                         table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
+                    elseif step.kind == "smart_skill_skip" then
+                        table.insert(steps, { kind = "smart_skill_skip", checks = step.checks, all_done_goto = step.all_done_goto })
                     elseif step.kind == "return" and not step.cf then
                         table.insert(steps, { kind = "return", serverhop = step.serverhop })
                     elseif step.kind == "serverhop" then
@@ -26678,6 +26680,8 @@ end
                         table.insert(xp_path, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
                     elseif step.kind == "skill_gate" then
                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
+                    elseif step.kind == "smart_skill_skip" then
+                        table.insert(xp_path, { kind = "smart_skill_skip", checks = step.checks, all_done_goto = step.all_done_goto })
                     elseif step.kind == "return" and not step.x then
                         table.insert(xp_path, { kind = "return", serverhop = step.serverhop })
                     elseif step.kind == "serverhop" then
@@ -27612,6 +27616,9 @@ end
                                         added = added + 1
                                     elseif step.kind == "skill_gate" then
                                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
+                                        added = added + 1
+                                    elseif step.kind == "smart_skill_skip" then
+                                        table.insert(xp_path, { kind = "smart_skill_skip", checks = step.checks, all_done_goto = step.all_done_goto })
                                         added = added + 1
                                     elseif step.kind == "return" and not step.x then
                                         table.insert(xp_path, { kind = "return", serverhop = step.serverhop })
@@ -30699,6 +30706,47 @@ end
                                         else
                                             library:Notify(string.format("Path: missing %s and no valid redo point set - continuing anyway", table.concat(missing, ", ")), 6)
                                         end
+                                    end
+                                end
+                            elseif step.kind == "smart_skill_skip" then
+                                -- runs once at the very start of a multi-segment path (e.g. the
+                                -- combined druid path): checks EVERY segment's skill up front, not
+                                -- just the next one, so a partially-completed run (e.g. already has
+                                -- Herbivore + Duplicate from before) jumps straight to the first
+                                -- segment it's actually still missing instead of redoing segments
+                                -- it doesn't need to. No physical walking needed - this fires before
+                                -- any movement has happened yet, so a plain index jump is fine.
+                                if not catchup and type(step.checks) == "table" then
+                                    local function has_item(want)
+                                        want = tostring(want):lower()
+                                        local bp = FindFirstChild(plr, "Backpack")
+                                        if bp then
+                                            for _, v in ipairs(bp:GetChildren()) do
+                                                if tostring(v.Name):lower():find(want, 1, true) then return true end
+                                            end
+                                        end
+                                        local char = plr.Character
+                                        if char then
+                                            for _, v in ipairs(char:GetChildren()) do
+                                                if tostring(v.Name):lower():find(want, 1, true) then return true end
+                                            end
+                                        end
+                                        return false
+                                    end
+                                    local target = nil
+                                    for _, check in ipairs(step.checks) do
+                                        if check.skill and not has_item(check.skill) then
+                                            target = tonumber(check.target)
+                                            break
+                                        end
+                                    end
+                                    if not target and step.all_done_goto then
+                                        target = tonumber(step.all_done_goto)
+                                    end
+                                    if target and target > i then
+                                        library:Notify(string.format("Path: already have earlier skills - skipping ahead to point #%d", target), 6)
+                                        i = target
+                                        jumped = true
                                     end
                                 end
                             elseif step.kind == "wait_ores" then
