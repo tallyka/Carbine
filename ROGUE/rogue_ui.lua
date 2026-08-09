@@ -25526,7 +25526,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 278 loaded - Fixed the Skip Illusionist waypoint setting the wrong toggle (Trinket Bot's instead of XP Farm's) - it now sets the right one and checks immediately instead of only reacting to future joins", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 279 loaded - Added smart_ingredient_skip: skips the shrieker/evil-eye farm segments if you already have Cursed Tag and/or Evil Eye instead of redoing them", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -26604,6 +26604,8 @@ end
                         table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
                         table.insert(steps, { kind = "smart_skill_skip", checks = step.checks, all_done_goto = step.all_done_goto })
+                    elseif step.kind == "smart_ingredient_skip" then
+                        table.insert(steps, { kind = "smart_ingredient_skip", want_all = step.want_all, target_all = step.target_all, want_any = step.want_any, target_any = step.target_any })
                     elseif step.kind == "return" and not step.cf then
                         table.insert(steps, { kind = "return", serverhop = step.serverhop })
                     elseif step.kind == "serverhop" then
@@ -26688,6 +26690,8 @@ end
                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
                         table.insert(xp_path, { kind = "smart_skill_skip", checks = step.checks, all_done_goto = step.all_done_goto })
+                    elseif step.kind == "smart_ingredient_skip" then
+                        table.insert(xp_path, { kind = "smart_ingredient_skip", want_all = step.want_all, target_all = step.target_all, want_any = step.want_any, target_any = step.target_any })
                     elseif step.kind == "return" and not step.x then
                         table.insert(xp_path, { kind = "return", serverhop = step.serverhop })
                     elseif step.kind == "serverhop" then
@@ -27625,6 +27629,9 @@ end
                                         added = added + 1
                                     elseif step.kind == "smart_skill_skip" then
                                         table.insert(xp_path, { kind = "smart_skill_skip", checks = step.checks, all_done_goto = step.all_done_goto })
+                                        added = added + 1
+                                    elseif step.kind == "smart_ingredient_skip" then
+                                        table.insert(xp_path, { kind = "smart_ingredient_skip", want_all = step.want_all, target_all = step.target_all, want_any = step.want_any, target_any = step.target_any })
                                         added = added + 1
                                     elseif step.kind == "return" and not step.x then
                                         table.insert(xp_path, { kind = "return", serverhop = step.serverhop })
@@ -30751,6 +30758,50 @@ end
                                     end
                                     if target and target > i then
                                         library:Notify(string.format("Path: already have earlier skills - skipping ahead to point #%d", target), 6)
+                                        i = target
+                                        jumped = true
+                                    end
+                                end
+                            elseif step.kind == "smart_ingredient_skip" then
+                                -- same idea as smart_skill_skip but for turn-in ingredients
+                                -- (Cursed Tag / Evil Eye / Shrieker Heart) instead of skills: if
+                                -- want_all is fully satisfied, skip straight to target_all (e.g.
+                                -- already have both Cursed Tag and Evil Eye - jump all the way to
+                                -- the Castle Sanctuary inn step, skipping both farm segments
+                                -- entirely). Otherwise if want_any is satisfied, skip to target_any
+                                -- (e.g. already have Cursed Tag - skip just the shrieker segment
+                                -- and go straight to evil eyes). If neither, no jump - just start
+                                -- the segment normally from here.
+                                if not catchup then
+                                    local function has_item(want)
+                                        want = tostring(want):lower()
+                                        local bp = FindFirstChild(plr, "Backpack")
+                                        if bp then
+                                            for _, v in ipairs(bp:GetChildren()) do
+                                                if tostring(v.Name):lower():find(want, 1, true) then return true end
+                                            end
+                                        end
+                                        local char = plr.Character
+                                        if char then
+                                            for _, v in ipairs(char:GetChildren()) do
+                                                if tostring(v.Name):lower():find(want, 1, true) then return true end
+                                            end
+                                        end
+                                        return false
+                                    end
+                                    local target = nil
+                                    if type(step.want_all) == "table" and #step.want_all > 0 and step.target_all then
+                                        local all_owned = true
+                                        for _, w in ipairs(step.want_all) do
+                                            if not has_item(w) then all_owned = false; break end
+                                        end
+                                        if all_owned then target = tonumber(step.target_all) end
+                                    end
+                                    if not target and step.want_any and step.target_any and has_item(step.want_any) then
+                                        target = tonumber(step.target_any)
+                                    end
+                                    if target and target > i then
+                                        library:Notify(string.format("Path: already have the needed ingredient(s) - skipping ahead to point #%d", target), 6)
                                         i = target
                                         jumped = true
                                     end
