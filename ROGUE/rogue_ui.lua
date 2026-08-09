@@ -13335,32 +13335,43 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     trinket_bot.pending_artifact_logs = {}
                 end
 
-                -- Wait for the character to actually settle (grounded, not mid-jump/
-                -- mid-transit toward wherever it was headed) before menuing out -
-                -- yanking the bot mid-movement can strand it airborne or cut off a
-                -- move that hadn't finished. Capped so a genuinely stuck-in-air
-                -- situation (e.g. falling into water) doesn't block the hop forever.
-                pcall(function()
-                    local char = plr.Character
-                    local hum = char and FindFirstChildOfClass(char, "Humanoid")
-                    if hum then
-                        local gt0 = os.clock()
-                        while hum.Parent and (os.clock() - gt0) < 4 and InAir() do
-                            task.wait(0.1)
-                        end
-                    end
-                end)
+                -- A real emergency (player/shrieker already within kill range) needs
+                -- to hop AS FAST AS POSSIBLE - waiting here previously got the bot
+                -- killed before it could even attempt the hop. Routine hops (path
+                -- done, artifact handled, etc.) aren't time-critical, so those still
+                -- get the grounded-wait courtesy to avoid yanking mid-movement.
+                local is_emergency = reason and (reason:lower():find("danger") or reason:lower():find("critical")
+                    or reason:lower():find("instantly") or reason:lower():find("dangerously close"))
 
-                local serverhop_success = false
-                if InAir() then
-                    serverhop_success = utility:Serverhop()
-                else
+                if not is_emergency then
+                    -- Wait for the character to actually settle (grounded, not mid-
+                    -- jump/mid-transit) before menuing out. Capped so a genuinely
+                    -- stuck-in-air situation (e.g. falling into water) doesn't block
+                    -- the hop forever.
                     pcall(function()
-                        rps.Requests.ReturnToMenu:InvokeServer()
+                        local char = plr.Character
+                        local hum = char and FindFirstChildOfClass(char, "Humanoid")
+                        if hum then
+                            local gt0 = os.clock()
+                            while hum.Parent and (os.clock() - gt0) < 4 and InAir() do
+                                task.wait(0.1)
+                            end
+                        end
                     end)
-                    task.wait(0.1)
-                    serverhop_success = utility:Serverhop()
                 end
+
+                -- Spam ReturnToMenu for 3 seconds instead of firing it once - a
+                -- single invoke doesn't always land (same reliability trick the
+                -- Teleport tab's rejoin flow already uses). ALWAYS does this, even
+                -- mid-air, since it costs nothing to try - previously the menu
+                -- invoke was skipped entirely whenever InAir() was true.
+                local serverhop_success = false
+                local menu_t0 = os.clock()
+                while (os.clock() - menu_t0) < 3 and not (shared and shared.is_unloading) do
+                    pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
+                    task.wait(0.05)
+                end
+                serverhop_success = utility:Serverhop()
 
                 if not serverhop_success then
                     library:Notify("!! SERVERHOP FAILED - retrying... !!")
@@ -14248,17 +14259,16 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                                     if distance <= critical_distance then
                                         critical_serverhop_sent = true
-                                        library:Notify(string.format("!! CRITICAL DANGER: Player %s within %.0f studs - finishing current move then serverhopping !!", other_player.Name, distance))
+                                        library:Notify(string.format("!! CRITICAL DANGER: Player %s within %.0f studs - serverhopping instantly !!", other_player.Name, distance))
                                         local hop_reason = string.format("Player %s within %.0f studs so am serverhopping instantly!!! (dangerously close)", other_player.Name, distance)
                                         task.spawn(function()
-                                            -- don't cut movement mid-air over a void - let the
-                                            -- character land wherever it was already headed first
-                                            -- (bounded so a genuinely stuck-in-air case doesn't
-                                            -- block the hop forever), THEN stop the path and hop.
-                                            local gt0 = os.clock()
-                                            while plr.Character and (os.clock() - gt0) < 2.5 and InAir() do
-                                                task.wait(0.1)
-                                            end
+                                            -- this is a real emergency (a hostile player is
+                                            -- already within kill range) - waiting for a "clean"
+                                            -- landing here previously cost several seconds and
+                                            -- got the bot killed before it could even attempt the
+                                            -- hop. SmoothTeleport's collision-restore fix (BUILD
+                                            -- 259) already handles a mid-air interrupt safely now,
+                                            -- so there's no longer a good reason to delay this.
                                             trinket_bot.path_running = false
                                             SafeServerhop(hop_reason)
                                         end)
@@ -14275,13 +14285,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                             local distance = (shrieker_root.Position - bot_pos).Magnitude
                                             if distance <= critical_distance then
                                                 critical_serverhop_sent = true
-                                                library:Notify(string.format("!! CRITICAL DANGER: Shrieker within %.0f studs - finishing current move then serverhopping !!", distance))
+                                                library:Notify(string.format("!! CRITICAL DANGER: Shrieker within %.0f studs - serverhopping instantly !!", distance))
                                                 local hop_reason = string.format("Shrieker within %.0f studs - serverhopping instantly!!! (necromancer attack)", distance)
                                                 task.spawn(function()
-                                                    local gt0 = os.clock()
-                                                    while plr.Character and (os.clock() - gt0) < 2.5 and InAir() do
-                                                        task.wait(0.1)
-                                                    end
                                                     trinket_bot.path_running = false
                                                     SafeServerhop(hop_reason)
                                                 end)
@@ -25520,7 +25526,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 275 loaded - Added smart_skill_skip: checks all 4 potion skills up front and jumps straight to the first segment actually missing one, instead of redoing segments already done", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 277 loaded - Trinket Bot serverhop now spams ReturnToMenu for 3s (instead of one invoke) for reliability, fixed it never firing when airborne, and emergency hops skip the landing-wait", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
