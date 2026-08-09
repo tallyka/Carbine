@@ -25526,7 +25526,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 277 loaded - Trinket Bot serverhop now spams ReturnToMenu for 3s (instead of one invoke) for reliability, fixed it never firing when airborne, and emergency hops skip the landing-wait", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 278 loaded - Fixed the Skip Illusionist waypoint setting the wrong toggle (Trinket Bot's instead of XP Farm's) - it now sets the right one and checks immediately instead of only reacting to future joins", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -30879,10 +30879,27 @@ end
                             elseif step.kind == "skipillus_on" or step.kind == "skipillus_off" then
                                 -- toggle "Skip Illusionist Servers" mid-path (e.g. right after a
                                 -- Sealed Shrieker Grip section, same idea as the existing auto-arm
-                                -- that happens once a repeat-block shrieker farm finishes)
-                                if Toggles.SkipIllusionist then
-                                    Toggles.SkipIllusionist:SetValue(step.kind == "skipillus_on")
-                                    library:Notify(step.kind == "skipillus_on" and "Path: Skip Illusionist Servers ON" or "Path: Skip Illusionist Servers OFF", 3)
+                                -- that happens once a repeat-block shrieker farm finishes).
+                                -- This was setting Toggles.SkipIllusionist, which is Trinket Bot's
+                                -- OWN separate toggle - XP Farm's actual serverhop-time check reads
+                                -- the xpfarm_skip_illus mem flag/toggle instead, so this waypoint
+                                -- was silently doing nothing for XP Farm paths. Fixed to set the
+                                -- right one, and also check immediately instead of only reacting to
+                                -- future joins/backpack changes.
+                                local turning_on = step.kind == "skipillus_on"
+                                pcall(function() mem:SetItem("xpfarm_skip_illus", turning_on and "true" or "false") end)
+                                if Toggles.xpfarm_skip_illus and Toggles.xpfarm_skip_illus.Value ~= turning_on then
+                                    pcall(function() Toggles.xpfarm_skip_illus:SetValue(turning_on) end)
+                                end
+                                library:Notify(turning_on and "Path: Skip Illusionist Servers ON" or "Path: Skip Illusionist Servers OFF", 3)
+
+                                if turning_on and server_has_illusionist() then
+                                    library:Notify("Path: Illusionist already in server - hopping now", 5)
+                                    pcall(function() mem:SetItem("xpfarm_resume_active", "true") end)
+                                    pcall(function() mem:SetItem("xpfarm_resume_idx", tostring(i)) end)
+                                    cheat_client.config.execute_on_serverhop = true
+                                    pcall(xpfarm_fast_serverhop)
+                                    return
                                 end
                                 task.wait(0.15)
                             elseif step.kind == "equip_pickaxe" then
