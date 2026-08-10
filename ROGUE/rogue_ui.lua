@@ -24758,6 +24758,19 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                 local gacha_player_range = (Options and Options.GachaDistance and Options.GachaDistance.Value) or 20
                 if gacha_player_range > 0 and has_player_near_gacha(gacha_player_range) then
+                    if plr.Character and cs:HasTag(plr.Character, "Danger") then
+                        repeat task.wait(0.1) until not plr.Character or not cs:HasTag(plr.Character, "Danger")
+                    end
+
+                    utility:plain_webhook(string.format("%s (%s) had a player come too close during gacha - serverhopping", plr.Name, plr.UserId))
+
+                    if rps.Requests and FindFirstChild(rps.Requests, "ReturnToMenu") and plr.Character then
+                        pcall(function()
+                            rps.Requests.ReturnToMenu:InvokeServer()
+                        end)
+                    end
+
+                    utility:Serverhop()
                     return false
                 end
 
