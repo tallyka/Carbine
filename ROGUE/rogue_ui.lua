@@ -25681,7 +25681,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 280 loaded - Fixed Hold Perflora/Pebble instantly re-equipping over an item mid-Auto-Use (e.g. Ice Essence never got a chance to actually use) - now respects the same lock Auto Use holds", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 287 loaded - Gacha Farm now standalone (own toggle/serverhop range/skip illus+mods/kick on rare scroll+low silver), Auto Craft no longer hangs on Bars (waits for their RemoteEvent instead of camera-hijacking)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
