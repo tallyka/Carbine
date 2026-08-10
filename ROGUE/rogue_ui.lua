@@ -24842,8 +24842,10 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             end
 
             utility:Connection(rps.Requests.DaysSurvivedChanged.OnClientEvent, function(days)
-                if not (Toggles and Toggles.day_farm and Toggles.day_farm.Value) then return end
-                
+                local day_farm_active = Toggles and Toggles.day_farm and Toggles.day_farm.Value
+                local gacha_farm_active = Toggles and Toggles.gacha_farm and Toggles.gacha_farm.Value
+                if not day_farm_active and not gacha_farm_active then return end
+
                 playerDays = days
                 utility:sound("rbxassetid://6729922069",4)
                 utility:plain_webhook(plr.Name .. " is now at " .. playerDays .. " days")
