@@ -6587,11 +6587,60 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             end
                             task.wait(0.1);
                         else
+                            -- No RemoteEvent on this item (e.g. smelted Bars) - it reads the
+                            -- LOCAL Mouse.Target/Hit when Activated, not the server-invoked
+                            -- GetMouse hack above, so the camera actually has to be facing
+                            -- the station's material slot or the game silently ignores the
+                            -- Activate() and the item just sits there equipped forever.
+                            -- WorldToScreenPoint alone isn't enough here since it only tells
+                            -- us if the part is ALREADY on screen - if the bot's camera is
+                            -- facing some other direction it never would be, so we briefly
+                            -- take over the camera to guarantee it's looking at the part,
+                            -- same as the AA Bypass/freecam code already does elsewhere.
+                            local camera = ws.CurrentCamera
+                            local original_camera_type = camera.CameraType
+                            local original_camera_cframe = camera.CFrame
+
+                            local function aim_at_station_part()
+                                pcall(function()
+                                    local target_part = station[part]
+                                    if not target_part then return end
+
+                                    camera.CameraType = Enum.CameraType.Scriptable
+                                    camera.CFrame = CFrame.new(camera.CFrame.Position, target_part.Position)
+
+                                    local viewport = camera.ViewportSize
+                                    vim:SendMouseMoveEvent(viewport.X / 2, viewport.Y / 2, game)
+                                end)
+                            end
+
+                            aim_at_station_part()
+                            task.wait(0.1)
                             k:Activate();
-            
+
+                            local activate_wait_start = os.clock()
+                            local last_reactivate = os.clock()
                             repeat
+                                aim_at_station_part()
                                 task.wait(utility:random_wait(true))
-                            until not k.Parent;
+                                if k.Parent and (os.clock() - last_reactivate) > 1 then
+                                    aim_at_station_part()
+                                    task.wait(0.05)
+                                    k:Activate()
+                                    last_reactivate = os.clock()
+                                end
+                            until not k.Parent
+                                or (shared and shared.is_unloading)
+                                or (os.clock() - activate_wait_start) > 8;
+
+                            pcall(function()
+                                camera.CameraType = original_camera_type
+                                camera.CFrame = original_camera_cframe
+                            end)
+
+                            if k.Parent then
+                                warn(string.format("[auto stuff] %s never left character after 8s - aiming/Activate may not be enough for this item", name))
+                            end
                         end;
                     end;
                 end;
