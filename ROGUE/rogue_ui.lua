@@ -8796,10 +8796,11 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             })
 
             group_farm:AddSlider("GachaDistance", {
-                Text = "Gacha Distance",
+                Text = "Skip Gacha if Player Within",
+                Tooltip = "Won't attempt gacha if another player is within this range (0 = disabled)",
                 Default = 20,
-                Min = 5,
-                Max = 100,
+                Min = 0,
+                Max = 200,
                 Rounding = 0,
                 Callback = function(value)
                 end
@@ -24709,6 +24710,21 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 return false
             end
 
+            local function has_player_near_gacha(range)
+                if not plr.Character or not FindFirstChild(plr.Character, "HumanoidRootPart") then return false end
+                local my_pos = plr.Character.HumanoidRootPart.Position
+
+                for _, other_player in next, plrs:GetPlayers() do
+                    if other_player ~= plr and other_player.Character then
+                        local their_hrp = FindFirstChild(other_player.Character, "HumanoidRootPart")
+                        if their_hrp and (their_hrp.Position - my_pos).Magnitude <= range then
+                            return true
+                        end
+                    end
+                end
+                return false
+            end
+
             local function gacha()
                 if not (Toggles and Toggles.gacha_farm and Toggles.gacha_farm.Value) then return false end
                 if not plr.Character then return end
@@ -24735,9 +24751,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     return false
                 end
 
-                local gacha_distance = (Options and Options.GachaDistance and Options.GachaDistance.Value) or 20
                 local distanceFromNPC = plr:DistanceFromCharacter(npcHead.Position)
-                if distanceFromNPC > gacha_distance then
+                if distanceFromNPC > 20 then
+                    return false
+                end
+
+                local gacha_player_range = (Options and Options.GachaDistance and Options.GachaDistance.Value) or 20
+                if gacha_player_range > 0 and has_player_near_gacha(gacha_player_range) then
                     return false
                 end
 
