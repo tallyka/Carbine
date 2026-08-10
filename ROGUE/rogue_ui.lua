@@ -8788,6 +8788,45 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
             group_farm:AddDivider()
 
+            group_farm:AddToggle("gacha_farm", {
+                Text = "Gacha Farm (Xenyari)",
+                Default = false,
+                Callback = function(value)
+                end
+            })
+
+            group_farm:AddSlider("GachaDistance", {
+                Text = "Gacha Distance",
+                Default = 20,
+                Min = 5,
+                Max = 100,
+                Rounding = 0,
+                Callback = function(value)
+                end
+            })
+
+            group_farm:AddToggle("gacha_skip_illusionist", {
+                Text = "Skip Gacha if Illusionist",
+                Default = false
+            })
+
+            group_farm:AddToggle("gacha_skip_mods", {
+                Text = "Skip Gacha if Moderator",
+                Default = false
+            })
+
+            group_farm:AddToggle("gacha_kick_rare_scroll", {
+                Text = "Kick on Rare Scroll (Snarv/Percutiens/Hoppa)",
+                Default = false
+            })
+
+            group_farm:AddToggle("gacha_low_silver_kick", {
+                Text = "Kick on Low Silver (<250)",
+                Default = false
+            })
+
+            group_farm:AddDivider()
+
             group_farm:AddToggle("loop_orderly", {
                 Text = "Loop Gain Orderly",
                 Default = false,
@@ -24630,42 +24669,86 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 local silver = Get("Silver")
 
                 if not silver then
+                    return true, nil
+                end
+
+                return silver >= 250, silver
+            end
+
+            local function is_gacha_moderator(player)
+                if cheat_client and cheat_client.mod_list and table.find(cheat_client.mod_list, player.UserId) then
                     return true
                 end
 
-                local has_enough = silver >= 250
-                if not has_enough and no_kick() then
-                    utility:plain_webhook(string.format("@here %s (%s) tried gacha without enough silver (250 needed, has %d)", plr.Name, plr.UserId, silver))
-                    return true
+                local success, isInGroup = pcall(function()
+                    return player:IsInGroup(4556484)
+                end)
+                if success and isInGroup then
+                    local role = player:GetRoleInGroup(4556484)
+                    if role ~= "Guest" then
+                        return true
+                    end
                 end
 
-                return has_enough
+                return false
+            end
+
+            local function has_gacha_illusionist()
+                for _, other_player in next, plrs:GetPlayers() do
+                    if other_player ~= plr then
+                        local backpack = FindFirstChild(other_player, "Backpack")
+                        local observed = backpack and FindFirstChild(backpack, "Observe")
+                        if not observed and other_player.Character then
+                            observed = FindFirstChild(other_player.Character, "Observe")
+                        end
+                        if observed then
+                            return true
+                        end
+                    end
+                end
+                return false
             end
 
             local function gacha()
-                if not (Toggles and Toggles.day_farm and Toggles.day_farm.Value) and plr.Name ~= "Tharxifen" then return false end
+                if not (Toggles and Toggles.gacha_farm and Toggles.gacha_farm.Value) then return false end
                 if not plr.Character then return end
+
+                if Toggles and Toggles.gacha_skip_illusionist and Toggles.gacha_skip_illusionist.Value and has_gacha_illusionist() then
+                    return false
+                end
+
+                if Toggles and Toggles.gacha_skip_mods and Toggles.gacha_skip_mods.Value then
+                    for _, other_player in next, plrs:GetPlayers() do
+                        if other_player ~= plr and is_gacha_moderator(other_player) then
+                            return false
+                        end
+                    end
+                end
 
                 local npc = FindFirstChild(workspace.NPCs, "Xenyari")
                 local npcHead = FindFirstChild(npc, "Head")
                 local clickDetector = FindFirstChildWhichIsA(npc, "ClickDetector")
-                
-                if not workspace.NPCs or not FindFirstChild(workspace.NPCs, "Xenyari") or 
+
+                if not workspace.NPCs or not FindFirstChild(workspace.NPCs, "Xenyari") or
                 not FindFirstChild(workspace.NPCs.Xenyari, "Head") or
                 not FindFirstChildWhichIsA(workspace.NPCs.Xenyari, "ClickDetector") then
                     return false
                 end
 
+                local gacha_distance = (Options and Options.GachaDistance and Options.GachaDistance.Value) or 20
                 local distanceFromNPC = plr:DistanceFromCharacter(npcHead.Position)
-                if distanceFromNPC > 20 then
+                if distanceFromNPC > gacha_distance then
                     return false
                 end
 
-                if not check_silver() then
-                    kickPlayer(string.format("%s (%s) tried gacha without enough silver (250 needed)", plr.Name, plr.UserId))
+                local has_enough_silver, silver_amount = check_silver()
+                if not has_enough_silver then
+                    if Toggles and Toggles.gacha_low_silver_kick and Toggles.gacha_low_silver_kick.Value then
+                        kickPlayer(string.format("%s (%s) has low silver for gacha (%d < 250)", plr.Name, plr.UserId, silver_amount or 0))
+                    end
                     return false
                 end
-                
+
                 if not playerDays then
                     playerDays = utility:getPlayerDays() or 0
                     if not playerDays then
@@ -24722,6 +24805,23 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 until not FindFirstChild(plr.PlayerGui, 'Captcha');
                 
                 return true
+            end
+
+            do
+                local rare_scrolls = {
+                    ["Scroll of Snarvindur"] = true,
+                    ["Scroll of Percutiens"] = true,
+                    ["Scroll of Hoppa"] = true,
+                }
+
+                if plr.Backpack then
+                    utility:Connection(plr.Backpack.ChildAdded, function(item)
+                        if not (Toggles and Toggles.gacha_kick_rare_scroll and Toggles.gacha_kick_rare_scroll.Value) then return end
+                        if not item:IsA("Tool") or not rare_scrolls[item.Name] then return end
+
+                        kickPlayer(string.format("%s (%s) picked up rare scroll: %s", plr.Name, plr.UserId, item.Name))
+                    end)
+                end
             end
 
             local function day_goal()
