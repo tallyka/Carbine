@@ -6540,9 +6540,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             warn("[auto stuff] Backpack not found")
                             return
                         end
-                        print(string.format("[auto stuff DEBUG] loop wants ingredient name=%q", tostring(name)))
                         local k = FindFirstChild(plr.Backpack, name);
-                        print(string.format("[auto stuff DEBUG] FindFirstChild(Backpack, %q) -> %s", tostring(name), k and k:GetFullName() or "nil"))
 
                         if not k then
                             warn(string.format("[auto stuff] missing ingredient: %s", name))
@@ -31678,15 +31676,26 @@ end
                                             local tool = bp and FindFirstChild(bp, matName)
                                             if not tool then return false end
 
+                                            -- station.Material isn't always a direct child on every
+                                            -- anvil - resolve it safely (recursive search as a
+                                            -- fallback) instead of indexing it directly, which threw
+                                            -- "Material is not a valid member of Model SmithingStation"
+                                            -- and killed the whole craft attempt.
+                                            local material_part = station:FindFirstChild("Material") or station:FindFirstChild("Material", true)
+                                            if not material_part then
+                                                library:Notify("Path: couldn't find the anvil's Material part - stopping", 4)
+                                                return false
+                                            end
+
                                             local hrp = local_hrp()
-                                            if hrp and (station.Material.Position - hrp.Position).Magnitude > 6 then
+                                            if hrp and (material_part.Position - hrp.Position).Magnitude > 6 then
                                                 -- stand a few studs BACK from Material, not on top of
                                                 -- it - moving to the exact position put the character
                                                 -- inside the anvil, which also blocks the camera from
                                                 -- ever seeing Material to click it
-                                                local away = (hrp.Position - station.Material.Position)
+                                                local away = (hrp.Position - material_part.Position)
                                                 if away.Magnitude < 0.01 then away = Vector3.new(0, 0, 1) end
-                                                local standPos = station.Material.Position + away.Unit * 4
+                                                local standPos = material_part.Position + away.Unit * 4
                                                 bot_move_to(standPos)
                                                 task.wait(0.3)
                                             end
@@ -31698,7 +31707,7 @@ end
                                                 -- between attempts a stale aim can land on Hammer
                                                 -- instead of Material
                                                 local cam = workspace.CurrentCamera
-                                                local sp = cam and cam:WorldToViewportPoint(station.Material.Position)
+                                                local sp = cam and cam:WorldToViewportPoint(material_part.Position)
                                                 if not (cam and sp) then return nil end
                                                 local cx = math.clamp(sp.X, 1, cam.ViewportSize.X - 1)
                                                 local cy = math.clamp(sp.Y, 1, cam.ViewportSize.Y - 1)
