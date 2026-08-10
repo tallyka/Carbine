@@ -31724,19 +31724,6 @@ end
                                                 return cx, cy
                                             end
 
-                                            local gui = FindFirstChild(plr, "PlayerGui")
-                                            local bpgui = gui and FindFirstChild(gui, "BackpackGui")
-                                            local frame = bpgui and FindFirstChild(bpgui, "MainFrame")
-                                            local slot
-                                            if frame then
-                                                for _, btn in ipairs(frame:GetDescendants()) do
-                                                    if btn:IsA("TextButton") and btn.Text == matName then
-                                                        slot = btn.Name:match("^(%d+)")
-                                                        break
-                                                    end
-                                                end
-                                            end
-
                                             -- Success signal: EITHER the station's own Contents
                                             -- string changes (what the original addItemsToStation
                                             -- checked for) OR bag_count drops - don't rely on just
@@ -31754,12 +31741,13 @@ end
                                                 local curTool = FindFirstChild(plr.Backpack, matName)
                                                 if not curTool then break end
                                                 local cx, cy = aim_at_material()
-                                                if slot and keypress and keyrelease then
-                                                    local vk = 48 + tonumber(slot)
-                                                    pcall(function() keypress(vk); keyrelease(vk) end)
-                                                else
-                                                    pcall(function() hum:EquipTool(curTool) end)
-                                                end
+                                                -- Equip by Tool instance directly (not a hotbar
+                                                -- number keypress) - the hotbar slot for matName
+                                                -- shifts as bars get created/consumed during
+                                                -- smelting, and a stale slot number can end up
+                                                -- pointing at Gate instead once it reflows into
+                                                -- that slot, which was equipping Gate mid-craft.
+                                                pcall(function() hum:EquipTool(curTool) end)
                                                 -- click RIGHT away, no wait - the item can bounce
                                                 -- back within a fraction of a second
                                                 if cx then
