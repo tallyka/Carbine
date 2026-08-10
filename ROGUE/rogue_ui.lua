@@ -6540,12 +6540,14 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             warn("[auto stuff] Backpack not found")
                             return
                         end
+                        print(string.format("[auto stuff DEBUG] loop wants ingredient name=%q", tostring(name)))
                         local k = FindFirstChild(plr.Backpack, name);
-            
-                        if not k then 
-                            warn(string.format("[auto stuff] missing ingredient: %s", name)) 
-                            return 
-                        end 
+                        print(string.format("[auto stuff DEBUG] FindFirstChild(Backpack, %q) -> %s", tostring(name), k and k:GetFullName() or "nil"))
+
+                        if not k then
+                            warn(string.format("[auto stuff] missing ingredient: %s", name))
+                            return
+                        end
             
                         if k.Parent == nil then 
                             warn(string.format("[auto stuff] cannot move %s, its parent is NULL", name))
