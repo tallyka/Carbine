@@ -25681,7 +25681,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 289 loaded - Fixed path Craft step crash (station.Material wasn't a direct member of this anvil) - Gacha Farm standalone toggle/serverhop range/skip illus+mods/kick on rare scroll+low silver", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 290 loaded - Fixed Craft step equipping Gate mid-craft (stale hotbar slot number reflowed onto Gate) - now equips the Bar Tool directly every attempt", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
