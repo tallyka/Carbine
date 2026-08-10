@@ -8796,11 +8796,11 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             })
 
             group_farm:AddSlider("GachaDistance", {
-                Text = "Skip Gacha if Player Within",
-                Tooltip = "Won't attempt gacha if another player is within this range (0 = disabled)",
+                Text = "Gacha Serverhop Range",
+                Tooltip = "Serverhops if another player is within this range during gacha (0 = disabled)",
                 Default = 20,
                 Min = 0,
-                Max = 200,
+                Max = 1000,
                 Rounding = 0,
                 Callback = function(value)
                 end
