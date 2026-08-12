@@ -8501,9 +8501,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         Text = inn_name,
                         Default = false,
                         Callback = function() end -- read-only status light, not user-driven
-                    }):AddButton("Teleport", function()
-                        task.spawn(function() teleport_to_inn_23(inn_name) end)
-                    end)
+                    })
+                    group_23:AddButton(toggle_id .. "_btn", {
+                        Text = "Teleport to " .. inn_name,
+                        Func = function()
+                            task.spawn(function() teleport_to_inn_23(inn_name) end)
+                        end
+                    })
                 end
 
                 task.spawn(function()
@@ -8739,9 +8743,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                 Text = point.name,
                                 Default = false,
                                 Callback = function() end -- read-only status light, not user-driven
-                            }):AddButton("Teleport", function()
-                                task.spawn(function() teleport_to_point_23(point) end)
-                            end)
+                            })
+                            group_23tp:AddButton(toggle_id .. "_btn", {
+                                Text = "Teleport to " .. point.name,
+                                Func = function()
+                                    task.spawn(function() teleport_to_point_23(point) end)
+                                end
+                            })
                         end
                     end
                 end
@@ -26055,7 +26063,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 295 loaded - Saved Teleports block on 23 tab now reports the exact error if it fails to load, so we can find the real bug", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 296 loaded - Fixed real bug: Toggle:AddButton isn't a thing in this UI lib, Teleport buttons are now separate buttons on both 23-tab lists", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
