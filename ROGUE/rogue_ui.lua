@@ -7335,7 +7335,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             Botting = window:AddTab("Botting", "bot"),
             Macros = window:AddTab("Macros", "play"),
             Interface = window:AddTab("Interface", "monitor"),
-            Config = window:AddTab("Config", "save")
+            Config = window:AddTab("Config", "save"),
+            TwentyThree = window:AddTab("23", "map-pin")
         }
 
         do
@@ -8407,6 +8408,255 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         end)
                     end
                 })
+            end
+
+            do
+                local group_23 = Tabs.TwentyThree:AddLeftGroupbox("Inn Teleports")
+                group_23:AddLabel("Lit = a player is within 50 studs of that inn's keeper right now")
+
+                local INN_TARGETS_23 = {
+                    "Southern Sanctuary",
+                    "Central Sanctuary",
+                    "Castle Sanctuary",
+                    "Wayside Inn",
+                    "Flowerlight Town",
+                    "Renova",
+                    "Oresfall",
+                    "Santorini",
+                    "Scroomville",
+                    "Sleeping Snail",
+                    "Kiki Village",
+                    "Frostfall Town",
+                    "Morokh Reservoir"
+                }
+
+                local function find_inn_keeper_23(inn_name)
+                    if not FindFirstChild(ws, "NPCs") then return nil end
+                    if inn_name == "Flowerlight Town" then
+                        return FindFirstChild(ws.NPCs, "Ria")
+                    elseif inn_name == "Scroomville" then
+                        return FindFirstChild(ws.NPCs, "Fungkeeper")
+                    else
+                        local want = (tostring(inn_name):gsub("^%s*(.-)%s*$", "%1")):lower()
+                        for _, npc in next, ws.NPCs:GetChildren() do
+                            if npc.Name:gsub("%s", ""):lower() == "innkeeper" and FindFirstChild(npc, "Location")
+                            and (npc.Location.Value:gsub("^%s*(.-)%s*$", "%1")):lower() == want then
+                                return npc
+                            end
+                        end
+                    end
+                    return nil
+                end
+
+                local function teleport_to_inn_23(inn_name)
+                    if shared and shared.is_unloading then return end
+                    if not plr.Character or not FindFirstChild(plr.Character, "HumanoidRootPart") then
+                        library:Notify("Character not found")
+                        return
+                    end
+
+                    local hrp = plr.Character.HumanoidRootPart
+                    local dialogue_response = (inn_name == "Flowerlight Town") and "A room, please." or "Sure."
+                    local inn_keeper = find_inn_keeper_23(inn_name)
+
+                    if not inn_keeper then
+                        library:Notify("Inn keeper not found at " .. inn_name)
+                        return
+                    end
+                    if not FindFirstChild(inn_keeper, "HumanoidRootPart") then
+                        library:Notify("Inn keeper has no HumanoidRootPart")
+                        return
+                    end
+
+                    local elapsed_time = 0
+                    while elapsed_time < 1 and not (shared and shared.is_unloading) do
+                        if plr.Character then
+                            plr.Character:PivotTo(inn_keeper:GetPivot())
+                            hrp.Velocity = Vector3.zero
+
+                            if (hrp.Position - inn_keeper.HumanoidRootPart.Position).Magnitude <= 10 then
+                                local click_detector = FindFirstChildWhichIsA(inn_keeper, "ClickDetector", true)
+                                if click_detector then
+                                    fireclickdetector(click_detector)
+                                end
+                            end
+
+                            if dialogue_remote then
+                                dialogue_remote:FireServer({choice = dialogue_response})
+                            end
+                        end
+                        elapsed_time = elapsed_time + task.wait()
+                    end
+
+                    if plr.Character then
+                        plr.Character:BreakJoints()
+                    end
+
+                    library:Notify("Teleported to " .. inn_name)
+                end
+
+                for _, inn_name in ipairs(INN_TARGETS_23) do
+                    local toggle_id = "inn23_" .. inn_name:gsub("%s", "")
+                    group_23:AddToggle(toggle_id, {
+                        Text = inn_name,
+                        Default = false,
+                        Callback = function() end -- read-only status light, not user-driven
+                    }):AddButton("Teleport", function()
+                        task.spawn(function() teleport_to_inn_23(inn_name) end)
+                    end)
+                end
+
+                task.spawn(function()
+                    while shared and not shared.is_unloading do
+                        for _, inn_name in ipairs(INN_TARGETS_23) do
+                            local toggle_id = "inn23_" .. inn_name:gsub("%s", "")
+                            local toggle = Toggles[toggle_id]
+                            if toggle then
+                                local keeper = find_inn_keeper_23(inn_name)
+                                local near = false
+                                if keeper and FindFirstChild(keeper, "HumanoidRootPart") then
+                                    local kpos = keeper.HumanoidRootPart.Position
+                                    for _, other in next, plrs:GetPlayers() do
+                                        if other ~= plr and other.Character and FindFirstChild(other.Character, "HumanoidRootPart") then
+                                            if (other.Character.HumanoidRootPart.Position - kpos).Magnitude <= 50 then
+                                                near = true
+                                                break
+                                            end
+                                        end
+                                    end
+                                end
+                                if toggle.Value ~= near then
+                                    pcall(function() toggle:SetValue(near) end)
+                                end
+                            end
+                        end
+                        task.wait(2)
+                    end
+                end)
+            end
+
+            do
+                local group_23watch = Tabs.TwentyThree:AddRightGroupbox("Menu Watch / Auto Join")
+
+                local menu_watch_active = false
+                local auto_join_active = false
+                local watched_players = {} -- set: username -> true, from the dropdown
+                local menu_debounce_23 = false
+
+                local function get_server_player_names()
+                    local names = {}
+                    for _, p in next, plrs:GetPlayers() do
+                        table.insert(names, p.Name)
+                    end
+                    table.sort(names)
+                    return names
+                end
+
+                group_23watch:AddDropdown("watch23_players", {
+                    Text = "Watch These Players",
+                    Tooltip = "If ANY selected player leaves the server, this account menus for safety.",
+                    Values = get_server_player_names(),
+                    Multi = true,
+                    Default = {},
+                    Callback = function(value)
+                        watched_players = {}
+                        for name, selected in next, value do
+                            if selected then watched_players[name] = true end
+                        end
+                    end
+                })
+
+                group_23watch:AddButton("refresh_watch23", {
+                    Text = "Refresh Player List",
+                    Func = function()
+                        if Options.watch23_players then
+                            Options.watch23_players:SetValues(get_server_player_names())
+                        end
+                    end
+                })
+
+                group_23watch:AddToggle("menu_watch_23", {
+                    Text = "Auto Menu When a Watched Player Leaves",
+                    Default = false,
+                    Callback = function(v) menu_watch_active = v end
+                })
+
+                group_23watch:AddToggle("auto_join_23", {
+                    Text = "Auto Join (Play/Rejoin) While Menued",
+                    Default = false,
+                    Callback = function(v) auto_join_active = v end
+                })
+
+                local function do_menu_23(reason)
+                    if menu_debounce_23 then return end
+                    menu_debounce_23 = true
+                    library:Notify("23 Tab: " .. reason .. " - menuing.")
+
+                    local requests = rps:FindFirstChild("Requests")
+                    local return_to_menu = requests and requests:FindFirstChild("ReturnToMenu")
+                    local to_menu = rps:FindFirstChild("toMenu")
+
+                    if return_to_menu and return_to_menu:IsA("RemoteFunction") then
+                        pcall(function() return_to_menu:InvokeServer() end)
+                    elseif to_menu and to_menu:IsA("RemoteEvent") then
+                        pcall(function() to_menu:FireServer() end)
+                    end
+                end
+
+                plrs.PlayerRemoving:Connect(function(leaving)
+                    if not menu_watch_active then return end
+                    if not watched_players[leaving.Name] then return end
+                    do_menu_23(leaving.Name .. " left")
+                end)
+
+                plr.CharacterAdded:Connect(function()
+                    menu_debounce_23 = false
+                end)
+
+                -- Auto Join: while there's no character (sitting at whatever
+                -- menu screen, first-load OR after ReturnToMenu), periodically
+                -- look for any visible Play/Rejoin/Continue/Join button and
+                -- press it. Searches broadly instead of one hardcoded path,
+                -- since the first-load menu and the post-ReturnToMenu menu are
+                -- different GUIs with different structures.
+                local AUTOJOIN_KEYWORDS = { "play", "rejoin", "continue", "join", "resume" }
+
+                local function find_join_button_23()
+                    local gui_root = plr:FindFirstChild("PlayerGui")
+                    if not gui_root then return nil end
+                    local found = nil
+                    pcall(function()
+                        for _, v in next, gui_root:GetDescendants() do
+                            if found then break end
+                            if (v:IsA("TextButton") or v:IsA("ImageButton")) and v.Visible then
+                                local text = (v:IsA("TextButton") and v.Text or ""):lower()
+                                local name = v.Name:lower()
+                                for _, kw in next, AUTOJOIN_KEYWORDS do
+                                    if text:find(kw, 1, true) or name:find(kw, 1, true) then
+                                        found = v
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                    return found
+                end
+
+                task.spawn(function()
+                    while shared and not shared.is_unloading do
+                        task.wait(2)
+                        if auto_join_active and not plr.Character then
+                            local btn = find_join_button_23()
+                            if btn then
+                                pcall(function()
+                                    pcall(replicatesignal, btn.MouseButton1Click)
+                                    firesignal(btn.MouseButton1Click)
+                                end)
+                            end
+                        end
+                    end
+                end)
             end
 
             group_exploits:AddDivider()
