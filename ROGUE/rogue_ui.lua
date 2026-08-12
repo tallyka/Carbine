@@ -8670,7 +8670,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             -- HYDROXIDE/teleport_points.json file the Teleport tab writes
             -- to (own pcall closure, same 200-local-safety reasoning as
             -- every other block on this tab).
-            if not (pcall(function()
+            local ok_23tp, err_23tp = pcall(function()
                 local group_23tp = Tabs.TwentyThree:AddLeftGroupbox("Saved Teleports")
                 group_23tp:AddLabel("Lit = a player is within 50 studs of that saved spot right now")
 
@@ -8777,8 +8777,10 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         task.wait(2)
                     end
                 end)
-            end)) then
-                pcall(function() library:Notify("23 TAB (Saved Teleports) UI FAILED - see console", 20) end)
+            end)
+            if not ok_23tp then
+                warn("[23TAB-SAVEDTP] " .. tostring(err_23tp))
+                pcall(function() library:Notify("23 TAB (Saved Teleports) FAILED: " .. tostring(err_23tp), 20) end)
             end
 
             group_exploits:AddDivider()
@@ -26053,7 +26055,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 294 loaded - 23 tab now lists ALL your saved teleport points with a live 50-stud proximity light + Teleport button on each", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 295 loaded - Saved Teleports block on 23 tab now reports the exact error if it fails to load, so we can find the real bug", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
