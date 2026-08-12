@@ -25931,7 +25931,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 290 loaded - Fixed Craft step equipping Gate mid-craft (stale hotbar slot number reflowed onto Gate) - now equips the Bar Tool directly every attempt", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 292 loaded - New '23' tab: inn teleports w/ live 50-stud proximity lights, Menu Watch (auto-menu on watched player leaving) + Auto Join (auto-rejoin) controls", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
