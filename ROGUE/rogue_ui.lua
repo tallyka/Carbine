@@ -8663,6 +8663,124 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 pcall(function() library:Notify("23 TAB (Menu Watch) UI FAILED - see console", 20) end)
             end
 
+            -- Saved Teleports (your own tp_store points) shown here too, one
+            -- light+button per point, so you can see at a glance which of
+            -- YOUR spots are empty vs. occupied - not just the fixed inn
+            -- list above. This block reads the same
+            -- HYDROXIDE/teleport_points.json file the Teleport tab writes
+            -- to (own pcall closure, same 200-local-safety reasoning as
+            -- every other block on this tab).
+            if not (pcall(function()
+                local group_23tp = Tabs.TwentyThree:AddLeftGroupbox("Saved Teleports")
+                group_23tp:AddLabel("Lit = a player is within 50 studs of that saved spot right now")
+
+                local tp23_points = {}
+                local function tp23_load()
+                    tp23_points = {}
+                    if readfile and isfile and isfile("HYDROXIDE/teleport_points.json") then
+                        local ok, data = pcall(function() return Services.HttpService:JSONDecode(readfile("HYDROXIDE/teleport_points.json")) end)
+                        if ok and type(data) == "table" then tp23_points = data end
+                    end
+                end
+                tp23_load()
+
+                local function tp23_hrp()
+                    return plr.Character and FindFirstChild(plr.Character, "HumanoidRootPart")
+                end
+
+                local function teleport_to_point_23(point)
+                    if shared and shared.is_unloading then return end
+                    local target_pos = Vector3.new(point.x, point.y, point.z)
+                    local root = tp23_hrp()
+                    if not root then library:Notify("Teleport: character not found"); return end
+                    local char = plr.Character
+                    local humanoid = char and FindFirstChildOfClass(char, "Humanoid")
+                    if humanoid then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+                    root.CFrame = root.CFrame + Vector3.new(0, 50, 0)
+                    task.wait(0.25)
+
+                    root = tp23_hrp()
+                    if not root then return end
+                    root.CFrame = CFrame.new(target_pos)
+                    pcall(function() root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+                    pcall(function() root.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
+
+                    local spam_t0 = os.clock()
+                    local fired_ok = false
+                    while (os.clock() - spam_t0) < 1 do
+                        local ok = pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
+                        if ok then fired_ok = true end
+                        task.wait(0.05)
+                    end
+                    library:Notify("Teleport: " .. (fired_ok and "menu fired" or "menu FAILED"), 3)
+                    if not fired_ok then return end
+
+                    pcall(function() plr.PlayerGui:WaitForChild("StartMenu", 30) end)
+                    if plr.PlayerGui:FindFirstChild("StartMenu") then
+                        pcall(function()
+                            if plr.PlayerGui.StartMenu:FindFirstChild("Choices") and
+                               plr.PlayerGui.StartMenu.Choices:FindFirstChild("Play") then
+                                firesignal(plr.PlayerGui.StartMenu.Choices.Play.MouseButton1Click)
+                            end
+                        end)
+                    end
+                end
+
+                local function tp23_toggle_id(pname)
+                    return "tp23_" .. pname:gsub("%s", "_"):gsub("[^%w_]", "")
+                end
+
+                local function tp23_rebuild_list()
+                    tp23_load()
+                    for _, point in ipairs(tp23_points) do
+                        local toggle_id = tp23_toggle_id(point.name)
+                        if not Toggles[toggle_id] then
+                            group_23tp:AddToggle(toggle_id, {
+                                Text = point.name,
+                                Default = false,
+                                Callback = function() end -- read-only status light, not user-driven
+                            }):AddButton("Teleport", function()
+                                task.spawn(function() teleport_to_point_23(point) end)
+                            end)
+                        end
+                    end
+                end
+                tp23_rebuild_list()
+
+                group_23tp:AddButton("tp23_refresh", {
+                    Text = "Refresh List (new/renamed points)",
+                    Tooltip = "Reloads from teleport_points.json and adds lights for any points saved after this loaded",
+                    Func = function() tp23_rebuild_list() end
+                })
+
+                task.spawn(function()
+                    while shared and not shared.is_unloading do
+                        for _, point in ipairs(tp23_points) do
+                            local toggle_id = tp23_toggle_id(point.name)
+                            local toggle = Toggles[toggle_id]
+                            if toggle then
+                                local target_pos = Vector3.new(point.x, point.y, point.z)
+                                local near = false
+                                for _, other in next, plrs:GetPlayers() do
+                                    if other ~= plr and other.Character and FindFirstChild(other.Character, "HumanoidRootPart") then
+                                        if (other.Character.HumanoidRootPart.Position - target_pos).Magnitude <= 50 then
+                                            near = true
+                                            break
+                                        end
+                                    end
+                                end
+                                if toggle.Value ~= near then
+                                    pcall(function() toggle:SetValue(near) end)
+                                end
+                            end
+                        end
+                        task.wait(2)
+                    end
+                end)
+            end)) then
+                pcall(function() library:Notify("23 TAB (Saved Teleports) UI FAILED - see console", 20) end)
+            end
+
             group_exploits:AddDivider()
 
             group_exploits:AddButton("enable_aa_bypass", {
@@ -25935,7 +26053,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 293 loaded - Fixed 23 tab compile-safety (200-local limit), added 50-stud proximity light to your saved Teleport tab locations", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 294 loaded - 23 tab now lists ALL your saved teleport points with a live 50-stud proximity light + Teleport button on each", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
