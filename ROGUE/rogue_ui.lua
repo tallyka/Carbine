@@ -8410,7 +8410,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 })
             end
 
-            do
+            if not (pcall(function()
                 local group_23 = Tabs.TwentyThree:AddLeftGroupbox("Inn Teleports")
                 group_23:AddLabel("Lit = a player is within 50 studs of that inn's keeper right now")
 
@@ -8533,9 +8533,11 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         task.wait(2)
                     end
                 end)
+            end)) then
+                pcall(function() library:Notify("23 TAB (Inns) UI FAILED - see console", 20) end)
             end
 
-            do
+            if not (pcall(function()
                 local group_23watch = Tabs.TwentyThree:AddRightGroupbox("Menu Watch / Auto Join")
 
                 local menu_watch_active = false
@@ -8657,6 +8659,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         end
                     end
                 end)
+            end)) then
+                pcall(function() library:Notify("23 TAB (Menu Watch) UI FAILED - see console", 20) end)
             end
 
             group_exploits:AddDivider()
@@ -25931,7 +25935,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 292 loaded - New '23' tab: inn teleports w/ live 50-stud proximity lights, Menu Watch (auto-menu on watched player leaving) + Auto Join (auto-rejoin) controls", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 293 loaded - Fixed 23 tab compile-safety (200-local limit), added 50-stud proximity light to your saved Teleport tab locations", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27385,6 +27389,38 @@ end
                         library:Notify("Deleted: " .. tostring(nm), 3)
                     end
                 })
+
+                group_tp:AddToggle("tp_proximity_light", {
+                    Text = "Someone Nearby (50 studs)",
+                    Default = false,
+                    Callback = function() end -- read-only status light, not user-driven
+                })
+
+                task.spawn(function()
+                    while shared and not shared.is_unloading do
+                        local toggle = Toggles.tp_proximity_light
+                        if toggle then
+                            local nm = Options.tp_selected and Options.tp_selected.Value
+                            local point = nm and tp_find(nm)
+                            local near = false
+                            if point then
+                                local target_pos = Vector3.new(point.x, point.y, point.z)
+                                for _, other in next, plrs:GetPlayers() do
+                                    if other ~= plr and other.Character and FindFirstChild(other.Character, "HumanoidRootPart") then
+                                        if (other.Character.HumanoidRootPart.Position - target_pos).Magnitude <= 50 then
+                                            near = true
+                                            break
+                                        end
+                                    end
+                                end
+                            end
+                            if toggle.Value ~= near then
+                                pcall(function() toggle:SetValue(near) end)
+                            end
+                        end
+                        task.wait(2)
+                    end
+                end)
             end)) then
                 pcall(function() library:Notify("TELEPORT TAB UI FAILED - see console", 20) end)
             end
