@@ -9228,6 +9228,12 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Default = false
             })
 
+            group_farm:AddToggle("gacha_dialogue_only", {
+                Text = "Gacha: Dialogue Only (don't answer captcha)",
+                Tooltip = "Walks up, opens dialogue, gets the captcha on screen, then stops - leaves the captcha up for a separate solver script to answer",
+                Default = false
+            })
+
             group_farm:AddDivider()
 
             group_farm:AddToggle("loop_orderly", {
@@ -25139,6 +25145,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 if not plr.Character then return end
                 if os.clock() < gacha_cooldown_until then return false end
 
+                -- A captcha (or the post-solve "I'll pay" dialogue) is
+                -- already up on screen - don't re-fire the click detector or
+                -- open a second dialogue_remote listener on top of the one
+                -- already watching it, whether we're solving it ourselves or
+                -- leaving it for a separate solver script.
+                if FindFirstChild(plr.PlayerGui, 'Captcha') then return true end
+
                 if Toggles and Toggles.gacha_skip_illusionist and Toggles.gacha_skip_illusionist.Value and has_gacha_illusionist() then
                     return false
                 end
@@ -25212,23 +25225,34 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             task.wait(1)
                             dialogConnection:Disconnect()
                         else
-                            -- If a captcha attempt was wrong, Xenyari locks
-                            -- you out for ~5min and this dialogue's only/first
-                            -- useful choice is "Bye" - prefer that over
-                            -- blindly picking choices[1] (which usually IS
-                            -- choices[1] anyway, but not guaranteed), and set
-                            -- a cooldown so gacha() stops hammering the NPC
-                            -- for those 5 minutes instead of retrying every
-                            -- second and getting nothing.
+                            -- Three cases share this same event:
+                            --  1. Captcha wrong -> Xenyari locks you out for
+                            --     ~5min and the only/first useful choice is
+                            --     "Bye" - prefer that, and start the cooldown
+                            --     so gacha() stops hammering the NPC for
+                            --     those 5 minutes.
+                            --  2. Captcha right (solved by us OR, in Dialogue
+                            --     Only mode, by a separate solver script) ->
+                            --     the follow-up choice to actually claim the
+                            --     scroll is "I'll pay" - prefer that so the
+                            --     reward doesn't get missed.
+                            --  3. Neither matches -> fall back to choices[1]
+                            --     like before.
                             local pick = dialogData.choices[1]
+                            local matched_bye = false
                             for _, choice_text in next, dialogData.choices do
-                                if tostring(choice_text):lower():find("bye", 1, true) then
+                                local lower_choice = tostring(choice_text):lower()
+                                if lower_choice:find("bye", 1, true) then
                                     pick = choice_text
+                                    matched_bye = true
                                     gacha_cooldown_until = os.clock() + 300
                                     break
+                                elseif lower_choice:find("pay", 1, true) then
+                                    pick = choice_text
                                 end
                             end
                             dialogue_remote:FireServer({choice = pick})
+                            if matched_bye then dialogConnection:Disconnect() end
                         end
                     end)
                 end
@@ -25237,8 +25261,18 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     fireclickdetector(clickDetector)
                 task.wait(0.25);
                 until FindFirstChild(plr.PlayerGui, 'CaptchaLoad') or FindFirstChild(plr.PlayerGui, 'Captcha');
-                
+
                 repeat task.wait(0.05) until FindFirstChild(plr.PlayerGui, 'Captcha');
+
+                -- Dialogue Only mode: the captcha is now up on screen - stop
+                -- here and leave it for a separate solver script to answer.
+                -- The dialogConnection above is still alive and will handle
+                -- the "I'll pay" (or "Bye") follow-up once that script
+                -- submits an answer, same as the normal flow below.
+                if Toggles and Toggles.gacha_dialogue_only and Toggles.gacha_dialogue_only.Value then
+                    return true
+                end
+
                 repeat
                     local captchaGUI = FindFirstChild(plr.PlayerGui, 'Captcha');
                     local choices = captchaGUI and captchaGUI.MainFrame.Options:GetChildren();
@@ -25262,7 +25296,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                     task.wait(1);
                 until not FindFirstChild(plr.PlayerGui, 'Captcha');
-                
+
                 return true
             end
 
@@ -26105,7 +26139,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 299 loaded - Gacha now clicks Bye on a failed captcha and cools down 5min instead of hammering retries", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 300 loaded - New 'Gacha: Dialogue Only' toggle for external solvers, auto-clicks 'I'll pay' to claim the scroll after a captcha's answered", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
