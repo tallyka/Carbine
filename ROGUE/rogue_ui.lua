@@ -26208,7 +26208,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 302 loaded - Gacha now clicks Xenyari with a real simulated mouse click instead of fireclickdetector", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 303 loaded - New path waypoints: CR Captcha (reset+6min wait on fail), Wait Timer, Reset If Safe", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27201,6 +27201,8 @@ end
                         local color, label
                         if step.kind == "npc" then
                             color = Color3.fromRGB(255, 170, 0); label = string.format("%d NPC", i)
+                        elseif step.kind == "npc_captcha" then
+                            color = Color3.fromRGB(255, 140, 220); label = string.format("%d CR", i)
                         elseif step.kind == "attack" then
                             color = Color3.fromRGB(255, 80, 80); label = string.format("%d ATK", i)
                         elseif step.kind == "mana_attack" then
@@ -27270,7 +27272,7 @@ end
                         or step.kind == "autobag_on" or step.kind == "autobag_off"
                         or step.kind == "instmine_on" or step.kind == "instmine_off"
                         or step.kind == "skipillus_on" or step.kind == "skipillus_off"
-                        or step.kind == "equip_pickaxe" then
+                        or step.kind == "equip_pickaxe" or step.kind == "reset_if_safe" then
                         table.insert(steps, { kind = step.kind })
                     elseif step.kind == "repeat_start" then
                         table.insert(steps, { kind = "repeat_start", count = step.count or 1, goal_kind = step.goal_kind, goal = step.goal, ingredient = step.ingredient })
@@ -27282,6 +27284,8 @@ end
                         table.insert(steps, { kind = "wait_ores" })
                     elseif step.kind == "wait_ingredient" then
                         table.insert(steps, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
+                    elseif step.kind == "wait_timer" then
+                        table.insert(steps, { kind = "wait_timer", minutes = step.minutes })
                     elseif step.kind == "skill_gate" then
                         table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27356,7 +27360,7 @@ end
                         or step.kind == "autobag_on" or step.kind == "autobag_off"
                         or step.kind == "instmine_on" or step.kind == "instmine_off"
                         or step.kind == "skipillus_on" or step.kind == "skipillus_off"
-                        or step.kind == "equip_pickaxe" then
+                        or step.kind == "equip_pickaxe" or step.kind == "reset_if_safe" then
                         table.insert(xp_path, { kind = step.kind })
                     elseif step.kind == "repeat_start" then
                         table.insert(xp_path, { kind = "repeat_start", count = step.count or 1, goal_kind = step.goal_kind, goal = step.goal, ingredient = step.ingredient })
@@ -27368,6 +27372,8 @@ end
                         table.insert(xp_path, { kind = "wait_ores" })
                     elseif step.kind == "wait_ingredient" then
                         table.insert(xp_path, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
+                    elseif step.kind == "wait_timer" then
+                        table.insert(xp_path, { kind = "wait_timer", minutes = step.minutes })
                     elseif step.kind == "skill_gate" then
                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27891,7 +27897,7 @@ end
             end)
             group_travel = group_path   -- Path sub-tab
             group_travel:AddDropdown("xpfarm_wp_action", {
-                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop" },
+                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Reset If Safe" },
                 Default = 1, Multi = false, Text = "Waypoint Action",
                 Tooltip = "What the 'Add Waypoint' button below creates",
                 Callback = function(v) selected_action = v end
@@ -27960,6 +27966,12 @@ end
                 Text = "Point Wait Time (s)",
                 Default = "3",
                 Placeholder = "seconds to wait / attack / talk at this waypoint"
+            })
+            group_travel:AddInput("xpfarm_wait_minutes", {
+                Text = "Wait Timer (minutes)",
+                Default = "15",
+                Numeric = true,
+                Placeholder = "how long a Wait Timer waypoint holds here"
             })
             group_travel:AddInput("xpfarm_insert_idx", {
                 Text = "Insert At # (blank = end)",
@@ -28082,10 +28094,24 @@ end
                         library:Notify("Added Serverhop - hops + resumes the path here (#" .. at .. ")")
                         return
                     end
+                    if selected_action == "Wait Timer" then
+                        local mins = math.max(1, math.floor(tonumber(Options.xpfarm_wait_minutes and Options.xpfarm_wait_minutes.Value) or 15))
+                        local at = add_step({ kind = "wait_timer", minutes = mins })
+                        update_path_label(); update_viz()
+                        library:Notify(string.format("Added Wait Timer - holds here %d minute(s) (#%d)", mins, at))
+                        return
+                    end
+                    if selected_action == "Reset If Safe" then
+                        local at = add_step({ kind = "reset_if_safe" })
+                        update_path_label(); update_viz()
+                        library:Notify("Added Reset If Safe - resets only when out of Danger (#" .. at .. ")")
+                        return
+                    end
                     local hrp = local_hrp()
                     if not hrp then library:Notify("Character not found"); return end
                     local kind = "point"
                     if selected_action == "Talk to NPC" then kind = "npc"
+                    elseif selected_action == "CR Captcha" then kind = "npc_captcha"
                     elseif selected_action == "Attack Here" then kind = "attack"
                     elseif selected_action == "Charge Mana + Attack" then kind = "mana_attack"
                     elseif selected_action == "Shrieker Grab" then kind = "shrieker"
@@ -28106,7 +28132,7 @@ end
                         step.weapon = (Options.xpfarm_weapon and Options.xpfarm_weapon.Value) or "Mythril Dagger"
                         step.count = math.max(0, math.floor(tonumber(Options.xpfarm_weapon_count and Options.xpfarm_weapon_count.Value) or 0))
                         step.delay = math.max(0, tonumber(Options.xpfarm_weapon_delay and Options.xpfarm_weapon_delay.Value) or 1)
-                    elseif kind == "npc" or kind == "sell_weapons" then
+                    elseif kind == "npc" or kind == "sell_weapons" or kind == "npc_captcha" then
                         local nm = Options.xpfarm_npc_name and Options.xpfarm_npc_name.Value or ""
                         if nm ~= "" then step.npc_name = nm end
                         if kind == "npc" and Options.xpfarm_npc_skip_armed and Options.xpfarm_npc_skip_armed.Value then step.skip_if_armed = true end
@@ -28320,7 +28346,7 @@ end
                                         or step.kind == "autobag_on" or step.kind == "autobag_off"
                                         or step.kind == "instmine_on" or step.kind == "instmine_off"
                                         or step.kind == "skipillus_on" or step.kind == "skipillus_off"
-                                        or step.kind == "equip_pickaxe" then
+                                        or step.kind == "equip_pickaxe" or step.kind == "reset_if_safe" then
                                         table.insert(xp_path, { kind = step.kind })
                                         added = added + 1
                                     elseif step.kind == "repeat_start" then
@@ -28337,6 +28363,9 @@ end
                                         added = added + 1
                                     elseif step.kind == "wait_ingredient" then
                                         table.insert(xp_path, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
+                                        added = added + 1
+                                    elseif step.kind == "wait_timer" then
+                                        table.insert(xp_path, { kind = "wait_timer", minutes = step.minutes })
                                         added = added + 1
                                     elseif step.kind == "skill_gate" then
                                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
@@ -31076,6 +31105,107 @@ end
                     end
                     return false
                 end
+                -- CR Captcha waypoint: walk to the named NPC, talk through with
+                -- fireclickdetector (NOT the real-mouse-click Xenyari uses -
+                -- only Xenyari's captcha carries that specific ban risk, per
+                -- the user), solve the captcha with the same solveCaptcha
+                -- engine, and report the outcome so the caller can decide
+                -- whether to keep going or reset+cooldown. Returns "success",
+                -- "fail" (wrong answer - the NPC's cooldown/Bye dialogue
+                -- showed up), or "error" (couldn't reach the NPC / no
+                -- captcha or dialogue ever appeared).
+                local function npc_talk_captcha(npc_name)
+                    local hrp = local_hrp()
+                    local npcs_folder = FindFirstChild(ws, "NPCs")
+                    if not hrp or not npcs_folder then return "error" end
+
+                    local want = npc_name and npc_name ~= "" and npc_name:gsub("^%s*(.-)%s*$", "%1"):lower() or nil
+                    local nearest, nearest_pos, ndist
+                    for _, npc in ipairs(npcs_folder:GetChildren()) do
+                        local nhrp = FindFirstChild(npc, "HumanoidRootPart")
+                        if nhrp and FindFirstChildWhichIsA(npc, "ClickDetector", true) then
+                            if not want or npc.Name:lower():find(want, 1, true) then
+                                local d = (nhrp.Position - hrp.Position).Magnitude
+                                if d <= 150 and (not ndist or d < ndist) then ndist = d; nearest = npc; nearest_pos = nhrp.Position end
+                            end
+                        end
+                    end
+                    if not nearest then
+                        library:Notify("CR Captcha: no NPC named '" .. tostring(npc_name) .. "' nearby", 6)
+                        return "error"
+                    end
+                    if not ndist or ndist > 6 then bot_move_to(nearest_pos) end
+
+                    local cd = FindFirstChildWhichIsA(nearest, "ClickDetector", true)
+                    local settled, matched_fail = false, false
+                    local conn
+                    if dialogue_remote then
+                        conn = utility:Connection(dialogue_remote.OnClientEvent, function(dialogData)
+                            task.wait(1)
+                            if not dialogData.choices then
+                                pcall(function() dialogue_remote:FireServer({exit = true}) end)
+                                settled = true
+                            else
+                                local pick = dialogData.choices[1]
+                                for _, choice_text in next, dialogData.choices do
+                                    local lc = tostring(choice_text):lower()
+                                    if lc:find("bye", 1, true) then
+                                        pick = choice_text
+                                        matched_fail = true
+                                        settled = true
+                                        break
+                                    elseif lc:find("pay", 1, true) then
+                                        pick = choice_text
+                                    end
+                                end
+                                pcall(function() dialogue_remote:FireServer({choice = pick}) end)
+                            end
+                        end)
+                    end
+
+                    local t0 = os.clock()
+                    repeat
+                        if cd then pcall(function() fireclickdetector(cd) end) end
+                        task.wait(0.25)
+                    until FindFirstChild(plr.PlayerGui, 'CaptchaLoad') or FindFirstChild(plr.PlayerGui, 'Captcha')
+                       or (plr.Character and FindFirstChild(plr.Character, "InDialogue"))
+                       or (os.clock() - t0) > 15
+
+                    local result = "error"
+                    if FindFirstChild(plr.PlayerGui, 'CaptchaLoad') or FindFirstChild(plr.PlayerGui, 'Captcha') then
+                        repeat task.wait(0.05) until FindFirstChild(plr.PlayerGui, 'Captcha')
+                        repeat
+                            local captchaGUI = FindFirstChild(plr.PlayerGui, 'Captcha')
+                            local choices = captchaGUI and captchaGUI.MainFrame.Options:GetChildren()
+                            local union = captchaGUI and captchaGUI.MainFrame.Viewport.Union
+                            utility:random_wait(true)
+                            if choices and union then
+                                local answer = solveCaptcha(union)
+                                for _, v in next, choices do
+                                    if v.Name == answer then
+                                        local objVector = v.AbsolutePosition
+                                        vim:SendMouseButtonEvent(objVector.X + 65, objVector.Y + 65, 0, true, game, 0)
+                                        utility:random_wait(true)
+                                        vim:SendMouseButtonEvent(objVector.X + 65, objVector.Y + 65, 0, false, game, 0)
+                                        break
+                                    end
+                                end
+                            end
+                            task.wait(1)
+                        until not FindFirstChild(plr.PlayerGui, 'Captcha')
+                        local settle_t0 = os.clock()
+                        repeat task.wait(0.2) until settled or (os.clock() - settle_t0) > 15
+                        result = matched_fail and "fail" or "success"
+                    elseif plr.Character and FindFirstChild(plr.Character, "InDialogue") then
+                        local settle_t0 = os.clock()
+                        repeat task.wait(0.2) until settled or (os.clock() - settle_t0) > 15
+                        result = matched_fail and "fail" or "error"
+                    end
+
+                    if conn then pcall(function() conn:Disconnect() end) end
+                    return result
+                end
+
                 -- INGREDIENT loop helpers (works for ANY path, not just the full bot): a
                 -- Repeat (Ingredient) block loops the gather route until the Backpack holds
                 -- >= goal of the ingredient (Quantity-summed like hasMaterials). On loop-back
@@ -31568,6 +31698,53 @@ end
                                     library:Notify("Path: Serverhop point - hopping + will resume", 4)
                                     do_path_serverhop(i + 1)
                                     break
+                                end
+                            elseif step.kind == "npc_captcha" then
+                                if not catchup then
+                                    library:Notify("Path: CR Captcha - talking to " .. tostring(step.npc_name), 4)
+                                    local result = npc_talk_captcha(step.npc_name)
+                                    if result == "fail" then
+                                        library:Notify("Path: CR captcha FAILED - resetting and waiting 6 min before redoing the path", 8)
+                                        if plr.Character then pcall(function() plr.Character:BreakJoints() end) end
+                                        local wait_t0 = os.clock()
+                                        while (os.clock() - wait_t0) < 360
+                                            and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                            and shared and not shared.is_unloading do
+                                            task.wait(1)
+                                        end
+                                        path_resume_from = 1
+                                        break
+                                    elseif result == "error" then
+                                        library:Notify("Path: CR Captcha point - couldn't reach/solve, continuing", 5)
+                                    else
+                                        library:Notify("Path: CR captcha solved", 4)
+                                    end
+                                end
+                            elseif step.kind == "wait_timer" then
+                                if not catchup then
+                                    local mins = tonumber(step.minutes) or 15
+                                    library:Notify(string.format("Path: waiting %d minute(s) here...", mins), 5)
+                                    local wait_t0 = os.clock()
+                                    while (os.clock() - wait_t0) < (mins * 60)
+                                        and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                        and shared and not shared.is_unloading do
+                                        task.wait(1)
+                                    end
+                                end
+                            elseif step.kind == "reset_if_safe" then
+                                if not catchup then
+                                    if plr.Character and not cs:HasTag(plr.Character, "Danger") then
+                                        library:Notify("Path: resetting (out of danger)", 4)
+                                        pcall(function() plr.Character:BreakJoints() end)
+                                        local old_char = plr.Character
+                                        local t0 = os.clock()
+                                        repeat task.wait(0.25)
+                                        until (plr.Character and plr.Character ~= old_char)
+                                            or (os.clock() - t0) > 20
+                                            or not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value)
+                                    else
+                                        library:Notify("Path: skipping reset - in Danger", 4)
+                                    end
                                 end
                             elseif step.kind == "inn" then
                                 -- teleport + rent (BreakJoints respawns at the inn), then CONFIRM
