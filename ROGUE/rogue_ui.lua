@@ -20,7 +20,13 @@ repeat task.wait() until Players.LocalPlayer
 repeat task.wait() until Players.LocalPlayer.Backpack
 
 local StarterGui = Services.StarterGui
-repeat task.wait() until StarterGui:FindFirstChild("LeaderboardGui")
+do
+    local t0 = os.clock()
+    repeat task.wait() until StarterGui:FindFirstChild("LeaderboardGui") or (os.clock() - t0) > 15
+    if not StarterGui:FindFirstChild("LeaderboardGui") then
+        warn("[Carbine] LeaderboardGui not found within 15s - this game may not have one, continuing anyway")
+    end
+end
 
 pcall(function()
     if getconnections then
@@ -26246,7 +26252,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 306 loaded - Gacha Dialogue Only no longer clicks Xenyari itself, just watches and clicks through Bye/I'll pay", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 307 loaded - Fixed script hanging forever waiting for LeaderboardGui on games that don't have one", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
