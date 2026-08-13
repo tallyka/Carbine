@@ -25295,6 +25295,24 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     warn("Not near Xenyari, continuing with normal day farm")
                 end
             end)
+
+            -- Gacha's real trigger was ONLY the DaysSurvivedChanged server
+            -- event above, which is a Day Farm side effect (fires when your
+            -- day counter ticks over) - not something the Gacha Farm toggle
+            -- controls on its own. With Day Farm off, that event basically
+            -- never fires, so Gacha Farm did nothing even when enabled. This
+            -- loop drives it independently, on its own timer.
+            task.spawn(function()
+                while shared and not shared.is_unloading do
+                    if Toggles and Toggles.gacha_farm and Toggles.gacha_farm.Value then
+                        local ok, result = pcall(gacha)
+                        if not ok then
+                            warn("[GACHA LOOP] error: " .. tostring(result))
+                        end
+                    end
+                    task.wait(1)
+                end
+            end)
         end
     
         do
@@ -26063,7 +26081,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 296 loaded - Fixed real bug: Toggle:AddButton isn't a thing in this UI lib, Teleport buttons are now separate buttons on both 23-tab lists", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 297 loaded - Fixed Gacha Farm: it only ran off Day Farm's day-change event before, now has its own independent loop", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
