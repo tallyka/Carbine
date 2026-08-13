@@ -25253,15 +25253,21 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             --     like before.
                             local pick = dialogData.choices[1]
                             local matched_bye = false
-                            for _, choice_text in next, dialogData.choices do
-                                local lower_choice = tostring(choice_text):lower()
+                            for _, choice_entry in next, dialogData.choices do
+                                -- a choice can be a plain string OR a table with a
+                                -- Text/text field (same as talk_to_nearest_npc's
+                                -- pickChoice elsewhere) - stringifying the table
+                                -- itself instead of reading its text silently never
+                                -- matched "bye", which is why this went undetected.
+                                local ctext = type(choice_entry) == "table" and (choice_entry.Text or choice_entry.text) or choice_entry
+                                local lower_choice = tostring(ctext):lower()
                                 if lower_choice:find("bye", 1, true) then
-                                    pick = choice_text
+                                    pick = choice_entry
                                     matched_bye = true
                                     gacha_cooldown_until = os.clock() + 300
                                     break
                                 elseif lower_choice:find("pay", 1, true) then
-                                    pick = choice_text
+                                    pick = choice_entry
                                 end
                             end
                             dialogue_remote:FireServer({choice = pick})
@@ -26208,7 +26214,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 303 loaded - New path waypoints: CR Captcha (reset+6min wait on fail), Wait Timer, Reset If Safe", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 304 loaded - Fixed Bye/pay detection: choices can be tables not just strings, was never matching", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31147,15 +31153,21 @@ end
                                 settled = true
                             else
                                 local pick = dialogData.choices[1]
-                                for _, choice_text in next, dialogData.choices do
-                                    local lc = tostring(choice_text):lower()
+                                for _, choice_entry in next, dialogData.choices do
+                                    -- a choice can be a plain string OR a table with a
+                                    -- Text/text field (same as talk_to_nearest_npc's
+                                    -- pickChoice) - stringifying the table itself
+                                    -- instead of reading its text silently never
+                                    -- matched "bye", which is why this went undetected.
+                                    local ctext = type(choice_entry) == "table" and (choice_entry.Text or choice_entry.text) or choice_entry
+                                    local lc = tostring(ctext):lower()
                                     if lc:find("bye", 1, true) then
-                                        pick = choice_text
+                                        pick = choice_entry
                                         matched_fail = true
                                         settled = true
                                         break
                                     elseif lc:find("pay", 1, true) then
-                                        pick = choice_text
+                                        pick = choice_entry
                                     end
                                 end
                                 pcall(function() dialogue_remote:FireServer({choice = pick}) end)
