@@ -25273,19 +25273,44 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     end)
                 end
 
+                -- fireclickdetector is an exploit-only call with no real
+                -- mouse input behind it at all - suspected to be part of why
+                -- gacha attempts were getting flagged. Click Xenyari with a
+                -- real simulated mouse event (VirtualInputManager) at his
+                -- on-screen position instead, same as the captcha answer
+                -- clicks below and the mine-swing pattern elsewhere in this
+                -- file - this doesn't need the Roblox window focused, and
+                -- looks like a genuine player click. Falls back to
+                -- fireclickdetector only if he's not currently on-screen.
+                local function real_click_xenyari()
+                    local camera = workspace.CurrentCamera
+                    if camera and npcHead then
+                        local ok, screenPos, onScreen = pcall(function()
+                            return camera:WorldToScreenPoint(npcHead.Position)
+                        end)
+                        if ok and onScreen then
+                            vim:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, true, game, 0)
+                            task.wait(0.05)
+                            vim:SendMouseButtonEvent(screenPos.X, screenPos.Y, 0, false, game, 0)
+                            return
+                        end
+                    end
+                    fireclickdetector(clickDetector)
+                end
+
                 -- If we're still on the ~5min cooldown from a prior failed
                 -- captcha, clicking Xenyari does NOT bring up a new Captcha -
                 -- it immediately brings up a "you failed, wait 5 min" dialogue
                 -- message (with a "Bye" choice) instead. The old exit
                 -- condition here only recognized CaptchaLoad/Captcha showing
                 -- up, so on cooldown it never triggered and this just spammed
-                -- fireclickdetector every 0.25s forever, re-triggering that
-                -- same gate message nonstop and never giving the dialogConnection
-                -- above a clean moment to actually land the Bye click. Also
-                -- exit as soon as we're in ANY dialogue (InDialogue tag), so
-                -- we stop clicking and let that connection handle it.
+                -- clicks every 0.25s forever, re-triggering that same gate
+                -- message nonstop and never giving the dialogConnection above
+                -- a clean moment to actually land the Bye click. Also exit as
+                -- soon as we're in ANY dialogue (InDialogue tag), so we stop
+                -- clicking and let that connection handle it.
                 repeat
-                    fireclickdetector(clickDetector)
+                    real_click_xenyari()
                 task.wait(0.25);
                 until FindFirstChild(plr.PlayerGui, 'CaptchaLoad') or FindFirstChild(plr.PlayerGui, 'Captcha')
                    or (plr.Character and FindFirstChild(plr.Character, "InDialogue"));
@@ -26183,7 +26208,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 301 loaded - Fixed gacha spam-clicking through the 5min cooldown gate dialogue instead of stopping to let Bye land", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 302 loaded - Gacha now clicks Xenyari with a real simulated mouse click instead of fireclickdetector", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
