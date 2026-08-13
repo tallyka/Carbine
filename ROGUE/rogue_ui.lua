@@ -24950,14 +24950,20 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     readByte(20)
                     readByte(20)
 
-                    local vertSize = string.unpack('ii', readByte(8));
+                    local vertSizeRaw = readByte(8)
+                    if #vertSizeRaw < 8 then break end
+                    local vertSize = string.unpack('ii', vertSizeRaw);
 
                     for i = 1, (vertSize/3) do
-                        local x, y, z = string.unpack('fff', readByte(12))
+                        local vertRaw = readByte(12)
+                        if #vertRaw < 12 then break end
+                        local x, y, z = string.unpack('fff', vertRaw)
                         points[#points + 1] = union.CFrame:ToWorldSpace(CFrame.new(x, y, z)).Position;
                     end;
 
-                    local faceSize = string.unpack('I', readByte(4));
+                    local faceSizeRaw = readByte(4)
+                    if #faceSizeRaw < 4 then break end
+                    local faceSize = string.unpack('I', faceSizeRaw);
                     readByte(faceSize * 4);
                 end;
 
@@ -26081,7 +26087,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 297 loaded - Fixed Gacha Farm: it only ran off Day Farm's day-change event before, now has its own independent loop", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 298 loaded - Fixed 'data string too short' crash in captcha solver's CSG reader, gacha should now actually pick an answer", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
