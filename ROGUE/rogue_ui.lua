@@ -25215,15 +25215,28 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     end
                 end
                 
+                local dialogue_settled = false
+
                 if dialogue_remote then
                     local dialogConnection
                     dialogConnection = utility:Connection(dialogue_remote.OnClientEvent, function(dialogData)
                         task.wait(1)
 
+                        pcall(function()
+                            local choice_strs = {}
+                            if dialogData.choices then
+                                for _, c in next, dialogData.choices do table.insert(choice_strs, tostring(c)) end
+                            end
+                            warn(string.format("[GACHA DIALOGUE] speaker=%s msg=%s choices=%s",
+                                tostring(dialogData.speaker), tostring(dialogData.msg),
+                                #choice_strs > 0 and table.concat(choice_strs, " | ") or "(none)"))
+                        end)
+
                         if not dialogData.choices then
                             dialogue_remote:FireServer({exit = true})
                             task.wait(1)
                             dialogConnection:Disconnect()
+                            dialogue_settled = true
                         else
                             -- Three cases share this same event:
                             --  1. Captcha wrong -> Xenyari locks you out for
@@ -25252,15 +25265,39 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                 end
                             end
                             dialogue_remote:FireServer({choice = pick})
-                            if matched_bye then dialogConnection:Disconnect() end
+                            if matched_bye then
+                                dialogConnection:Disconnect()
+                                dialogue_settled = true
+                            end
                         end
                     end)
                 end
 
+                -- If we're still on the ~5min cooldown from a prior failed
+                -- captcha, clicking Xenyari does NOT bring up a new Captcha -
+                -- it immediately brings up a "you failed, wait 5 min" dialogue
+                -- message (with a "Bye" choice) instead. The old exit
+                -- condition here only recognized CaptchaLoad/Captcha showing
+                -- up, so on cooldown it never triggered and this just spammed
+                -- fireclickdetector every 0.25s forever, re-triggering that
+                -- same gate message nonstop and never giving the dialogConnection
+                -- above a clean moment to actually land the Bye click. Also
+                -- exit as soon as we're in ANY dialogue (InDialogue tag), so
+                -- we stop clicking and let that connection handle it.
                 repeat
                     fireclickdetector(clickDetector)
                 task.wait(0.25);
-                until FindFirstChild(plr.PlayerGui, 'CaptchaLoad') or FindFirstChild(plr.PlayerGui, 'Captcha');
+                until FindFirstChild(plr.PlayerGui, 'CaptchaLoad') or FindFirstChild(plr.PlayerGui, 'Captcha')
+                   or (plr.Character and FindFirstChild(plr.Character, "InDialogue"));
+
+                if not (FindFirstChild(plr.PlayerGui, 'CaptchaLoad') or FindFirstChild(plr.PlayerGui, 'Captcha')) then
+                    -- Got a dialogue instead of a captcha (cooldown gate, most
+                    -- likely) - stop clicking and just wait for dialogConnection
+                    -- to pick "Bye" and settle it, instead of hammering again.
+                    local settle_start = os.clock()
+                    repeat task.wait(0.2) until dialogue_settled or (os.clock() - settle_start) > 15
+                    return true
+                end
 
                 repeat task.wait(0.05) until FindFirstChild(plr.PlayerGui, 'Captcha');
 
@@ -25296,6 +25333,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                     task.wait(1);
                 until not FindFirstChild(plr.PlayerGui, 'Captcha');
+
+                -- Captcha closed - if we got it wrong, the "wait 5 min" +
+                -- Bye dialogue is about to arrive via dialogConnection above.
+                -- Give it a moment to land before returning, so the outer
+                -- gacha loop doesn't immediately re-click Xenyari on top of it.
+                local settle_start2 = os.clock()
+                repeat task.wait(0.2) until dialogue_settled or (os.clock() - settle_start2) > 15
 
                 return true
             end
@@ -26139,7 +26183,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 300 loaded - New 'Gacha: Dialogue Only' toggle for external solvers, auto-clicks 'I'll pay' to claim the scroll after a captcha's answered", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 301 loaded - Fixed gacha spam-clicking through the 5min cooldown gate dialogue instead of stopping to let Bye land", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
