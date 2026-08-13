@@ -25048,6 +25048,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
             local time_elapsed = 0
             local playerDays = 0
+            local gacha_cooldown_until = 0 -- os.clock() timestamp; failing the captcha locks Xenyari out for ~5min
 
             local function no_kick()
                 if Toggles and Toggles.no_kick and Toggles.no_kick.Value then
@@ -25136,6 +25137,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             local function gacha()
                 if not (Toggles and Toggles.gacha_farm and Toggles.gacha_farm.Value) then return false end
                 if not plr.Character then return end
+                if os.clock() < gacha_cooldown_until then return false end
 
                 if Toggles and Toggles.gacha_skip_illusionist and Toggles.gacha_skip_illusionist.Value and has_gacha_illusionist() then
                     return false
@@ -25204,13 +25206,29 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     local dialogConnection
                     dialogConnection = utility:Connection(dialogue_remote.OnClientEvent, function(dialogData)
                         task.wait(1)
-                        
+
                         if not dialogData.choices then
                             dialogue_remote:FireServer({exit = true})
                             task.wait(1)
                             dialogConnection:Disconnect()
                         else
-                            dialogue_remote:FireServer({choice = dialogData.choices[1]})
+                            -- If a captcha attempt was wrong, Xenyari locks
+                            -- you out for ~5min and this dialogue's only/first
+                            -- useful choice is "Bye" - prefer that over
+                            -- blindly picking choices[1] (which usually IS
+                            -- choices[1] anyway, but not guaranteed), and set
+                            -- a cooldown so gacha() stops hammering the NPC
+                            -- for those 5 minutes instead of retrying every
+                            -- second and getting nothing.
+                            local pick = dialogData.choices[1]
+                            for _, choice_text in next, dialogData.choices do
+                                if tostring(choice_text):lower():find("bye", 1, true) then
+                                    pick = choice_text
+                                    gacha_cooldown_until = os.clock() + 300
+                                    break
+                                end
+                            end
+                            dialogue_remote:FireServer({choice = pick})
                         end
                     end)
                 end
@@ -26087,7 +26105,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 298 loaded - Fixed 'data string too short' crash in captcha solver's CSG reader, gacha should now actually pick an answer", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 299 loaded - Gacha now clicks Bye on a failed captcha and cools down 5min instead of hammering retries", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
