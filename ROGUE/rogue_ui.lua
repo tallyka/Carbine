@@ -26214,7 +26214,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 304 loaded - Fixed Bye/pay detection: choices can be tables not just strings, was never matching", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 305 loaded - CR Captcha now only counts a real 'pay' confirmation as success; anything else resets+waits, never silently continues", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31143,7 +31143,15 @@ end
                     if not ndist or ndist > 6 then bot_move_to(nearest_pos) end
 
                     local cd = FindFirstChildWhichIsA(nearest, "ClickDetector", true)
-                    local settled, matched_fail = false, false
+                    -- Both fail (Bye) AND success (I'll pay) can end in a final
+                    -- "no choices" message that just exits the conversation -
+                    -- so "settled without seeing Bye" is NOT proof of success.
+                    -- Only treat it as success if we actually saw a "pay"
+                    -- choice; anything else (including a plain no-choices
+                    -- notice we never got a positive signal from) is NOT
+                    -- confirmed - the caller treats unconfirmed the same as
+                    -- failed, since continuing on a maybe is what risks a ban.
+                    local settled, matched_fail, matched_pay = false, false, false
                     local conn
                     if dialogue_remote then
                         conn = utility:Connection(dialogue_remote.OnClientEvent, function(dialogData)
@@ -31168,6 +31176,7 @@ end
                                         break
                                     elseif lc:find("pay", 1, true) then
                                         pick = choice_entry
+                                        matched_pay = true
                                     end
                                 end
                                 pcall(function() dialogue_remote:FireServer({choice = pick}) end)
@@ -31207,11 +31216,11 @@ end
                         until not FindFirstChild(plr.PlayerGui, 'Captcha')
                         local settle_t0 = os.clock()
                         repeat task.wait(0.2) until settled or (os.clock() - settle_t0) > 15
-                        result = matched_fail and "fail" or "success"
+                        result = matched_pay and "success" or "fail"
                     elseif plr.Character and FindFirstChild(plr.Character, "InDialogue") then
                         local settle_t0 = os.clock()
                         repeat task.wait(0.2) until settled or (os.clock() - settle_t0) > 15
-                        result = matched_fail and "fail" or "error"
+                        result = matched_pay and "success" or "fail"
                     end
 
                     if conn then pcall(function() conn:Disconnect() end) end
@@ -31715,8 +31724,16 @@ end
                                 if not catchup then
                                     library:Notify("Path: CR Captcha - talking to " .. tostring(step.npc_name), 4)
                                     local result = npc_talk_captcha(step.npc_name)
-                                    if result == "fail" then
-                                        library:Notify("Path: CR captcha FAILED - resetting and waiting 6 min before redoing the path", 8)
+                                    -- "error" (couldn't reach the NPC, no captcha ever showed
+                                    -- up, or the outcome was never positively confirmed) is
+                                    -- treated the SAME as a failed captcha, not a shrug-and-
+                                    -- continue - continuing on an unconfirmed captcha is
+                                    -- exactly what risks a ban here.
+                                    if result == "success" then
+                                        library:Notify("Path: CR captcha solved", 4)
+                                    else
+                                        library:Notify("Path: CR captcha " .. (result == "fail" and "FAILED" or "unconfirmed")
+                                            .. " - resetting and waiting 6 min before redoing the path", 8)
                                         if plr.Character then pcall(function() plr.Character:BreakJoints() end) end
                                         local wait_t0 = os.clock()
                                         while (os.clock() - wait_t0) < 360
@@ -31726,10 +31743,6 @@ end
                                         end
                                         path_resume_from = 1
                                         break
-                                    elseif result == "error" then
-                                        library:Notify("Path: CR Captcha point - couldn't reach/solve, continuing", 5)
-                                    else
-                                        library:Notify("Path: CR captcha solved", 4)
                                     end
                                 end
                             elseif step.kind == "wait_timer" then
