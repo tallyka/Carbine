@@ -9230,7 +9230,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
             group_farm:AddToggle("gacha_dialogue_only", {
                 Text = "Gacha: Dialogue Only (don't answer captcha)",
-                Tooltip = "Walks up, opens dialogue, gets the captcha on screen, then stops - leaves the captcha up for a separate solver script to answer",
+                Tooltip = "Doesn't walk up or click Xenyari at all - a separate script drives that and solves the captcha. This just watches for the resulting dialogue and clicks through it (I'll pay on success, Bye on a failed answer).",
                 Default = false
             })
 
@@ -25145,6 +25145,15 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 if not plr.Character then return end
                 if os.clock() < gacha_cooldown_until then return false end
 
+                -- Dialogue Only: don't walk up or click Xenyari at all - a
+                -- separate script drives that (and solves the captcha). We
+                -- only watch dialogue_remote (see the standalone watcher
+                -- below) and click through Bye/pay whenever a dialogue shows
+                -- up, however it got triggered.
+                if Toggles and Toggles.gacha_dialogue_only and Toggles.gacha_dialogue_only.Value then
+                    return false
+                end
+
                 -- A captcha (or the post-solve "I'll pay" dialogue) is
                 -- already up on screen - don't re-fire the click detector or
                 -- open a second dialogue_remote listener on top of the one
@@ -25332,15 +25341,6 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                 repeat task.wait(0.05) until FindFirstChild(plr.PlayerGui, 'Captcha');
 
-                -- Dialogue Only mode: the captcha is now up on screen - stop
-                -- here and leave it for a separate solver script to answer.
-                -- The dialogConnection above is still alive and will handle
-                -- the "I'll pay" (or "Bye") follow-up once that script
-                -- submits an answer, same as the normal flow below.
-                if Toggles and Toggles.gacha_dialogue_only and Toggles.gacha_dialogue_only.Value then
-                    return true
-                end
-
                 repeat
                     local captchaGUI = FindFirstChild(plr.PlayerGui, 'Captcha');
                     local choices = captchaGUI and captchaGUI.MainFrame.Options:GetChildren();
@@ -25374,6 +25374,38 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                 return true
             end
+
+            -- Dialogue Only watcher: while Gacha: Dialogue Only is on, this
+            -- never clicks Xenyari itself (a separate script does that and
+            -- solves the captcha) - it just watches dialogue_remote and
+            -- clicks through whatever dialogue results: "I'll pay" on a
+            -- success (that's how the scroll actually gets handed over after
+            -- the captcha, so it's preferred over any other choice first),
+            -- "Bye" if it failed, otherwise falls back to the first choice.
+            task.spawn(function()
+                while shared and not shared.is_unloading and not dialogue_remote do task.wait(0.5) end
+                if not dialogue_remote then return end
+                utility:Connection(dialogue_remote.OnClientEvent, function(dialogData)
+                    if not (Toggles and Toggles.gacha_dialogue_only and Toggles.gacha_dialogue_only.Value) then return end
+                    task.wait(1)
+                    if not dialogData.choices then
+                        pcall(function() dialogue_remote:FireServer({exit = true}) end)
+                        return
+                    end
+                    local pick = dialogData.choices[1]
+                    for _, choice_entry in next, dialogData.choices do
+                        local ctext = type(choice_entry) == "table" and (choice_entry.Text or choice_entry.text) or choice_entry
+                        local lc = tostring(ctext):lower()
+                        if lc:find("pay", 1, true) then
+                            pick = choice_entry
+                            break
+                        elseif lc:find("bye", 1, true) then
+                            pick = choice_entry
+                        end
+                    end
+                    pcall(function() dialogue_remote:FireServer({choice = pick}) end)
+                end)
+            end)
 
             do
                 local rare_scrolls = {
@@ -26214,7 +26246,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 305 loaded - CR Captcha now only counts a real 'pay' confirmation as success; anything else resets+waits, never silently continues", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 306 loaded - Gacha Dialogue Only no longer clicks Xenyari itself, just watches and clicks through Bye/I'll pay", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
