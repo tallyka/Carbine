@@ -263,24 +263,45 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
     local flagged_chats = {'clipped','exploiter','banned','blacklisted','clip','hacker'}
     local hidden_folder = Instance.new("Folder", ui)
-    local area_markers = ws:WaitForChild("AreaMarkers")
-    local area_data = require(rps:WaitForChild("Info"):WaitForChild("AreaData"))
+    -- All of these used to be bare WaitForChild() (no timeout - hangs
+    -- FOREVER, completely silently, if the target doesn't exist) which is
+    -- exactly what "the script does nothing at all in this game" looks
+    -- like from the outside. Every one now uses WaitForChild's built-in
+    -- timeout form (returns nil instead of hanging) so a game missing one
+    -- of these structures can't block the whole script from loading -
+    -- whatever depends on a nil value here just won't work in that
+    -- specific game, instead of nothing working at all.
+    local area_markers = ws:WaitForChild("AreaMarkers", 15)
+    local area_data
+    do
+        local info_folder = rps:WaitForChild("Info", 15)
+        local area_data_module = info_folder and info_folder:WaitForChild("AreaData", 15)
+        if area_data_module then
+            local ok, result = pcall(require, area_data_module)
+            if ok then area_data = result
+            else warn("[Carbine] require(AreaData) failed: " .. tostring(result)) end
+        else
+            warn("[Carbine] ReplicatedStorage.Info.AreaData not found within 15s - this game may not have it")
+        end
+    end
 
     local get_mouse_remote
     if game.PlaceId == 14341521240 then
         get_mouse_remote = nil
     else
-        get_mouse_remote = rps:WaitForChild("Requests"):WaitForChild("GetMouse")
+        local requests_folder = rps:WaitForChild("Requests", 15)
+        get_mouse_remote = requests_folder and requests_folder:WaitForChild("GetMouse", 15)
     end
 
     local join_server
     if game.PlaceId == 14341521240 then
         join_server = nil
     else
-        join_server = rps:WaitForChild("Requests"):WaitForChild("JoinPublicServer")
+        local requests_folder2 = rps:WaitForChild("Requests", 15)
+        join_server = requests_folder2 and requests_folder2:WaitForChild("JoinPublicServer", 15)
     end
 
-    local live_folder = ws:WaitForChild("Live")
+    local live_folder = ws:WaitForChild("Live", 15)
     local headers = {["content-type"] = "application/json"}
 
     local teleport_failed = false
@@ -26252,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 307 loaded - Fixed script hanging forever waiting for LeaderboardGui on games that don't have one", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 308 loaded - Fixed 5 more no-timeout WaitForChild calls (AreaMarkers/AreaData/GetMouse/JoinPublicServer/Live) that could hang the script forever", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
