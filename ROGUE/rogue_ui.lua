@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 310 loaded - Added Wait For Day and Loop Orderly (N times) path waypoints", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 311 loaded - Loop Orderly (N times) now waits out the full respawn (Immortal appear+clear) before the next rep, so the elixir survives to be reused correctly", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31912,12 +31912,31 @@ end
                                         local equippedElixir = plr.Character and FindFirstChild(plr.Character, "Tespian Elixir")
                                         if equippedElixir and FindFirstChild(equippedElixir, "RemoteEvent") then
                                             equippedElixir.RemoteEvent:FireServer(plr.Character.HumanoidRootPart.CFrame, "Part", "Self")
+
+                                            -- Deliberately reset BEFORE the server finishes consuming
+                                            -- the elixir - that's the whole point (get the drink's
+                                            -- effect, keep the item so the same elixir survives the
+                                            -- respawn and can be reused next rep). Don't wait for
+                                            -- consumption here, just the tunable delay - same as the
+                                            -- always-on "Loop Gain Orderly" toggle uses.
                                             task.wait((Options and Options.loop_orderly_delay and Options.loop_orderly_delay.Value) or 2)
                                             pcall(function() plr.Character:BreakJoints() end)
 
+                                            -- Wait for the respawn's Immortal grace period to both
+                                            -- START and FULLY CLEAR before the next rep, so the new
+                                            -- character/backpack are actually settled (this is the
+                                            -- "wait for the loop to go through" step that was missing -
+                                            -- previously the next rep started the instant Immortal
+                                            -- appeared, often before the respawn had really finished).
                                             local immortal_t0 = os.clock()
                                             repeat task.wait(0.5)
                                             until FindFirstChild(plr.Character, "Immortal") or (os.clock() - immortal_t0) > 20
+
+                                            local clear_t0 = os.clock()
+                                            repeat task.wait(0.5)
+                                            until not FindFirstChild(plr.Character, "Immortal") or (os.clock() - clear_t0) > 30
+
+                                            task.wait(0.5) -- small settle buffer for backpack/character to finish populating
 
                                             done = done + 1
                                         else
