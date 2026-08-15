@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 314 loaded - Talk to NPC now supports a Choice Sequence field with @equip: entries to equip an item mid-dialogue", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 315 loaded - Added Teleport Menu path waypoint (jump+CFrame+spam menu+rejoin, retries if it misses the target)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27377,6 +27377,8 @@ end
                         table.insert(steps, { kind = "orderly_n", count = step.count })
                     elseif step.kind == "equip_item" then
                         table.insert(steps, { kind = "equip_item", item_name = step.item_name })
+                    elseif step.kind == "tp_menu" then
+                        table.insert(steps, { kind = "tp_menu", location = step.location })
                     elseif step.kind == "skill_gate" then
                         table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27472,6 +27474,8 @@ end
                         table.insert(xp_path, { kind = "orderly_n", count = step.count })
                     elseif step.kind == "equip_item" then
                         table.insert(xp_path, { kind = "equip_item", item_name = step.item_name })
+                    elseif step.kind == "tp_menu" then
+                        table.insert(xp_path, { kind = "tp_menu", location = step.location })
                     elseif step.kind == "skill_gate" then
                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27995,7 +27999,7 @@ end
             end)
             group_travel = group_path   -- Path sub-tab
             group_travel:AddDropdown("xpfarm_wp_action", {
-                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Reset If Safe" },
+                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Teleport Menu", "Reset If Safe" },
                 Default = 1, Multi = false, Text = "Waypoint Action",
                 Tooltip = "What the 'Add Waypoint' button below creates",
                 Callback = function(v) selected_action = v end
@@ -28113,6 +28117,27 @@ end
                 Text = "Or Type Item Name",
                 Default = "",
                 Placeholder = "leave blank to use the dropdown selection above instead"
+            })
+            group_travel:AddDropdown("xpfarm_tp_location", {
+                Values = { "(refresh list)" },
+                Default = 1, Multi = false, Text = "Teleport Menu Location",
+                Tooltip = "Which of your saved Teleport tab locations a 'Teleport Menu' waypoint jumps to. Click Refresh Locations below to load the current list."
+            })
+            group_travel:AddButton("xpfarm_tp_refresh", {
+                Text = "Refresh Locations",
+                Tooltip = "Re-reads your saved points from the Teleport tab",
+                Func = function()
+                    local names = {}
+                    if readfile and isfile and isfile("HYDROXIDE/teleport_points.json") then
+                        local ok, data = pcall(function() return Services.HttpService:JSONDecode(readfile("HYDROXIDE/teleport_points.json")) end)
+                        if ok and type(data) == "table" then
+                            for _, p in ipairs(data) do table.insert(names, p.name) end
+                        end
+                    end
+                    if #names == 0 then names = { "(no saved locations)" } end
+                    pcall(function() Options.xpfarm_tp_location:SetValues(names) end)
+                    library:Notify(string.format("Refreshed: %d saved location(s)", #names), 3)
+                end
             })
             group_travel:AddInput("xpfarm_insert_idx", {
                 Text = "Insert At # (blank = end)",
@@ -28279,6 +28304,17 @@ end
                         local at = add_step({ kind = "equip_item", item_name = item_name })
                         update_path_label(); update_viz()
                         library:Notify(string.format("Added Equip Item: %s (#%d)", item_name, at))
+                        return
+                    end
+                    if selected_action == "Teleport Menu" then
+                        local loc = Options.xpfarm_tp_location and Options.xpfarm_tp_location.Value
+                        if not loc or loc == "" or loc == "(refresh list)" or loc == "(no saved locations)" then
+                            library:Notify("Teleport Menu: click Refresh Locations and pick a saved spot first", 5)
+                            return
+                        end
+                        local at = add_step({ kind = "tp_menu", location = loc })
+                        update_path_label(); update_viz()
+                        library:Notify(string.format("Added Teleport Menu: %s (#%d)", loc, at))
                         return
                     end
                     local hrp = local_hrp()
@@ -28559,6 +28595,9 @@ end
                                         added = added + 1
                                     elseif step.kind == "equip_item" then
                                         table.insert(xp_path, { kind = "equip_item", item_name = step.item_name })
+                                        added = added + 1
+                                    elseif step.kind == "tp_menu" then
+                                        table.insert(xp_path, { kind = "tp_menu", location = step.location })
                                         added = added + 1
                                     elseif step.kind == "skill_gate" then
                                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
@@ -32208,6 +32247,97 @@ end
                                         library:Notify(string.format("Path: '%s' not found in bag/character - continuing anyway", tostring(item_name)), 6)
                                     end
                                     task.wait(0.15)
+                                end
+                            elseif step.kind == "tp_menu" then
+                                if not catchup then
+                                    local loc_name = step.location
+                                    local point = nil
+                                    if readfile and isfile and isfile("HYDROXIDE/teleport_points.json") then
+                                        local ok, data = pcall(function() return Services.HttpService:JSONDecode(readfile("HYDROXIDE/teleport_points.json")) end)
+                                        if ok and type(data) == "table" then
+                                            for _, p in ipairs(data) do
+                                                if p.name == loc_name then point = p; break end
+                                            end
+                                        end
+                                    end
+                                    if not point then
+                                        library:Notify("Path: Teleport Menu - saved location '" .. tostring(loc_name) .. "' not found", 6)
+                                    else
+                                        local target_pos = Vector3.new(point.x, point.y, point.z)
+                                        local landed = false
+                                        for attempt = 1, 3 do
+                                            if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value) or (shared and shared.is_unloading) then break end
+                                            library:Notify(string.format("Path: Teleport Menu to '%s' (attempt %d/3)...", loc_name, attempt), 3)
+
+                                            local root = local_hrp()
+                                            if not root then break end
+                                            local char = plr.Character
+                                            local humanoid = char and FindFirstChildOfClass(char, "Humanoid")
+                                            if humanoid then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+                                            root.CFrame = root.CFrame + Vector3.new(0, 50, 0)
+                                            task.wait(0.25)
+
+                                            root = local_hrp()
+                                            if not root then break end
+                                            root.CFrame = CFrame.new(target_pos)
+                                            pcall(function() root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+                                            pcall(function() root.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
+
+                                            -- spam the menu invoke for 1s right after landing, same
+                                            -- as the Teleport tab's own button - a single fire can
+                                            -- miss if the position hasn't settled/replicated yet
+                                            local spam_t0 = os.clock()
+                                            local fired_ok = false
+                                            while (os.clock() - spam_t0) < 1 do
+                                                local ok = pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
+                                                if ok then fired_ok = true end
+                                                task.wait(0.05)
+                                            end
+                                            if not fired_ok then
+                                                library:Notify("Path: Teleport Menu - couldn't fire the menu request, retrying", 4)
+                                                task.wait(1)
+                                                continue
+                                            end
+
+                                            pcall(function() plr.PlayerGui:WaitForChild("StartMenu", 30) end)
+                                            if plr.PlayerGui:FindFirstChild("StartMenu") then
+                                                pcall(function()
+                                                    if plr.PlayerGui.StartMenu:FindFirstChild("Choices") and
+                                                       plr.PlayerGui.StartMenu.Choices:FindFirstChild("Play") then
+                                                        firesignal(plr.PlayerGui.StartMenu.Choices.Play.MouseButton1Click)
+                                                    end
+                                                end)
+                                            end
+
+                                            -- wait for the character to actually respawn back in,
+                                            -- then check whether it landed near the target - if the
+                                            -- position didn't take (anti-cheat corrected it, or the
+                                            -- menu/rejoin dropped us at the default spawn instead),
+                                            -- this is what catches it and triggers a retry
+                                            local respawn_t0 = os.clock()
+                                            local new_root = nil
+                                            while (os.clock() - respawn_t0) < 30 do
+                                                new_root = local_hrp()
+                                                if new_root then break end
+                                                task.wait(0.5)
+                                            end
+                                            task.wait(1) -- small settle after respawn
+
+                                            new_root = local_hrp()
+                                            local dist = new_root and (new_root.Position - target_pos).Magnitude
+                                            if new_root and dist and dist <= 100 then
+                                                library:Notify(string.format("Path: Teleport Menu landed near '%s' (%.0f studs off)", loc_name, dist), 3)
+                                                landed = true
+                                                break
+                                            else
+                                                library:Notify(string.format("Path: Teleport Menu missed '%s' (%s) - retrying", loc_name, dist and (string.format("%.0f studs off", dist)) or "no character"), 4)
+                                            end
+                                        end
+                                        if not landed then
+                                            library:Notify("Path: Teleport Menu gave up after 3 attempts - continuing path", 6)
+                                        end
+                                    end
+                                    task.wait(0.3)
                                 end
                             elseif step.cf then
                                 bot_move_to(step.cf.Position)
