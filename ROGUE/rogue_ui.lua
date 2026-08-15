@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 313 loaded - Added Equip Item path waypoint (pick from bag or type a name)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 314 loaded - Talk to NPC now supports a Choice Sequence field with @equip: entries to equip an item mid-dialogue", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -26953,6 +26953,25 @@ end
                 -- back to auto-picking the first choice once the sequence runs out.
                 local seqIdx = 1
                 local function pickChoice(choices)
+                    -- "@equip:Item Name" entries aren't a dialogue choice to match - they're
+                    -- an instruction to equip that item right now, mid-conversation (e.g. an
+                    -- NPC hands you an item on one line, then expects it equipped before the
+                    -- next line goes through). Run any of these queued up next, in order,
+                    -- before falling through to matching a real choice.
+                    while choice_sequence and choice_sequence[seqIdx] and choice_sequence[seqIdx]:sub(1, 7) == "@equip:" do
+                        local item_name = choice_sequence[seqIdx]:sub(8)
+                        local char = plr.Character
+                        local tool = (char and FindFirstChild(char, item_name))
+                            or (plr.Backpack and FindFirstChild(plr.Backpack, item_name))
+                        local hum = char and FindFirstChildOfClass(char, "Humanoid")
+                        if hum and tool then
+                            pcall(function() hum:EquipTool(tool) end)
+                            library:Notify("Path: equipped '" .. item_name .. "' mid-dialogue", 3)
+                        else
+                            library:Notify("Path: '" .. item_name .. "' not found to equip mid-dialogue", 5)
+                        end
+                        seqIdx = seqIdx + 1
+                    end
                     if choice_sequence and choice_sequence[seqIdx] then
                         local want = choice_sequence[seqIdx]:lower()
                         for _, choice in ipairs(choices) do
@@ -28025,6 +28044,11 @@ end
                 Default = false,
                 Tooltip = "For a 'buy a sword' NPC: if you already hold a real weapon, skip this waypoint entirely instead of talking to them (so it doesn't buy a sword you don't need)."
             })
+            group_travel:AddInput("xpfarm_npc_choice_sequence", {
+                Text = "Choice Sequence (comma separated, optional)",
+                Default = "",
+                Placeholder = "e.g. toilet, @equip:Love Letter, give - matches each dialogue choice's text in order; @equip:Item Name equips that item mid-conversation instead of picking a choice"
+            })
             group_travel:AddDropdown("xpfarm_ingredient", {
                 Values = { "Dire Flower", "Crown Flower", "Lava Flower", "Tellbloom", "Blood Thorn", "Evoflower", "Sky Orchid", "Silent Night", "Scroom", "Zombie Scroom", "Periashroom", "Glow Shroom", "Snowshroom", "Trote", "Freeleaf", "Orcher Leaf", "Moss Plant", "Potato", "Polar Plant", "Canewood", "Uncanny Tentacle", "Strange Tentacle", "Acorn Light", "Creely", "Vile Seed", "Desert Mist", "Ice Jar", "Vulture Egg" },
                 Default = 1, Multi = false, Text = "Ingredient (for gate)",
@@ -28286,6 +28310,15 @@ end
                         local nm = Options.xpfarm_npc_name and Options.xpfarm_npc_name.Value or ""
                         if nm ~= "" then step.npc_name = nm end
                         if kind == "npc" and Options.xpfarm_npc_skip_armed and Options.xpfarm_npc_skip_armed.Value then step.skip_if_armed = true end
+                        local seq_text = (Options.xpfarm_npc_choice_sequence and Options.xpfarm_npc_choice_sequence.Value) or ""
+                        if seq_text ~= "" then
+                            local seq = {}
+                            for part in seq_text:gmatch("([^,]+)") do
+                                local trimmed = part:gsub("^%s*(.-)%s*$", "%1")
+                                if trimmed ~= "" then table.insert(seq, trimmed) end
+                            end
+                            if #seq > 0 then step.choice_sequence = seq end
+                        end
                     end
                     local at = add_step(step)
                     update_path_label(); update_viz()
