@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 316 loaded - Teleport Menu waypoint drops the jump-hop, spams the menu request every frame right after the CFrame set", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 317 loaded - Teleport Menu waypoint now bakes the x/y/z into the step itself instead of depending on a name lookup at run time", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27378,7 +27378,7 @@ end
                     elseif step.kind == "equip_item" then
                         table.insert(steps, { kind = "equip_item", item_name = step.item_name })
                     elseif step.kind == "tp_menu" then
-                        table.insert(steps, { kind = "tp_menu", location = step.location })
+                        table.insert(steps, { kind = "tp_menu", x = step.x, y = step.y, z = step.z, label = step.label })
                     elseif step.kind == "skill_gate" then
                         table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27475,7 +27475,7 @@ end
                     elseif step.kind == "equip_item" then
                         table.insert(xp_path, { kind = "equip_item", item_name = step.item_name })
                     elseif step.kind == "tp_menu" then
-                        table.insert(xp_path, { kind = "tp_menu", location = step.location })
+                        table.insert(xp_path, { kind = "tp_menu", x = step.x, y = step.y, z = step.z, label = step.label })
                     elseif step.kind == "skill_gate" then
                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -28312,9 +28312,26 @@ end
                             library:Notify("Teleport Menu: click Refresh Locations and pick a saved spot first", 5)
                             return
                         end
-                        local at = add_step({ kind = "tp_menu", location = loc })
+                        -- resolve to the actual x/y/z NOW and bake it into the step, rather
+                        -- than storing just the saved-location name - a name-only reference
+                        -- would break for anyone whose teleport_points.json doesn't have a
+                        -- point with that exact name (different save, renamed it, etc).
+                        local point = nil
+                        if readfile and isfile and isfile("HYDROXIDE/teleport_points.json") then
+                            local ok, data = pcall(function() return Services.HttpService:JSONDecode(readfile("HYDROXIDE/teleport_points.json")) end)
+                            if ok and type(data) == "table" then
+                                for _, p in ipairs(data) do
+                                    if p.name == loc then point = p; break end
+                                end
+                            end
+                        end
+                        if not point then
+                            library:Notify("Teleport Menu: couldn't read '" .. tostring(loc) .. "' from your saved locations", 5)
+                            return
+                        end
+                        local at = add_step({ kind = "tp_menu", x = point.x, y = point.y, z = point.z, label = loc })
                         update_path_label(); update_viz()
-                        library:Notify(string.format("Added Teleport Menu: %s (#%d)", loc, at))
+                        library:Notify(string.format("Added Teleport Menu: %s @ %.0f,%.0f,%.0f (#%d)", loc, point.x, point.y, point.z, at))
                         return
                     end
                     local hrp = local_hrp()
@@ -28597,7 +28614,7 @@ end
                                         table.insert(xp_path, { kind = "equip_item", item_name = step.item_name })
                                         added = added + 1
                                     elseif step.kind == "tp_menu" then
-                                        table.insert(xp_path, { kind = "tp_menu", location = step.location })
+                                        table.insert(xp_path, { kind = "tp_menu", x = step.x, y = step.y, z = step.z, label = step.label })
                                         added = added + 1
                                     elseif step.kind == "skill_gate" then
                                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
@@ -32250,20 +32267,16 @@ end
                                 end
                             elseif step.kind == "tp_menu" then
                                 if not catchup then
-                                    local loc_name = step.location
-                                    local point = nil
-                                    if readfile and isfile and isfile("HYDROXIDE/teleport_points.json") then
-                                        local ok, data = pcall(function() return Services.HttpService:JSONDecode(readfile("HYDROXIDE/teleport_points.json")) end)
-                                        if ok and type(data) == "table" then
-                                            for _, p in ipairs(data) do
-                                                if p.name == loc_name then point = p; break end
-                                            end
-                                        end
-                                    end
-                                    if not point then
-                                        library:Notify("Path: Teleport Menu - saved location '" .. tostring(loc_name) .. "' not found", 6)
+                                    -- x/y/z are baked into the step itself at Add Waypoint time,
+                                    -- not looked up by name at run time - so this doesn't depend
+                                    -- on a matching entry existing in teleport_points.json (which
+                                    -- could be missing, renamed, or just not there for whoever
+                                    -- else runs this path).
+                                    local loc_name = step.label or "saved spot"
+                                    if not (step.x and step.y and step.z) then
+                                        library:Notify("Path: Teleport Menu step has no position saved", 6)
                                     else
-                                        local target_pos = Vector3.new(point.x, point.y, point.z)
+                                        local target_pos = Vector3.new(step.x, step.y, step.z)
                                         local landed = false
                                         for attempt = 1, 3 do
                                             if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value) or (shared and shared.is_unloading) then break end
