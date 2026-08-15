@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 309 loaded - Added Loop Orderly On/Off and Wait For Day path waypoints", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 310 loaded - Added Wait For Day and Loop Orderly (N times) path waypoints", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27354,6 +27354,8 @@ end
                         table.insert(steps, { kind = "wait_timer", minutes = step.minutes })
                     elseif step.kind == "wait_day" then
                         table.insert(steps, { kind = "wait_day", day = step.day })
+                    elseif step.kind == "orderly_n" then
+                        table.insert(steps, { kind = "orderly_n", count = step.count })
                     elseif step.kind == "skill_gate" then
                         table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27445,6 +27447,8 @@ end
                         table.insert(xp_path, { kind = "wait_timer", minutes = step.minutes })
                     elseif step.kind == "wait_day" then
                         table.insert(xp_path, { kind = "wait_day", day = step.day })
+                    elseif step.kind == "orderly_n" then
+                        table.insert(xp_path, { kind = "orderly_n", count = step.count })
                     elseif step.kind == "skill_gate" then
                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27968,7 +27972,7 @@ end
             end)
             group_travel = group_path   -- Path sub-tab
             group_travel:AddDropdown("xpfarm_wp_action", {
-                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Reset If Safe" },
+                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Reset If Safe" },
                 Default = 1, Multi = false, Text = "Waypoint Action",
                 Tooltip = "What the 'Add Waypoint' button below creates",
                 Callback = function(v) selected_action = v end
@@ -28049,6 +28053,12 @@ end
                 Default = "1",
                 Numeric = true,
                 Placeholder = "holds here until DaysSurvived reaches this"
+            })
+            group_travel:AddInput("xpfarm_orderly_count", {
+                Text = "Loop Orderly Count",
+                Default = "5",
+                Numeric = true,
+                Placeholder = "how many drink+reset cycles to run here"
             })
             group_travel:AddInput("xpfarm_insert_idx", {
                 Text = "Insert At # (blank = end)",
@@ -28195,6 +28205,13 @@ end
                         local at = add_step({ kind = "wait_day", day = day })
                         update_path_label(); update_viz()
                         library:Notify(string.format("Added Wait For Day - holds here until Day %d (#%d)", day, at))
+                        return
+                    end
+                    if selected_action == "Loop Orderly (N times)" then
+                        local n = math.max(1, math.floor(tonumber(Options.xpfarm_orderly_count and Options.xpfarm_orderly_count.Value) or 5))
+                        local at = add_step({ kind = "orderly_n", count = n })
+                        update_path_label(); update_viz()
+                        library:Notify(string.format("Added Loop Orderly x%d - drinks a Tespian Elixir + resets, %d time(s), then continues (#%d)", n, n, at))
                         return
                     end
                     local hrp = local_hrp()
@@ -28460,6 +28477,9 @@ end
                                         added = added + 1
                                     elseif step.kind == "wait_day" then
                                         table.insert(xp_path, { kind = "wait_day", day = step.day })
+                                        added = added + 1
+                                    elseif step.kind == "orderly_n" then
+                                        table.insert(xp_path, { kind = "orderly_n", count = step.count })
                                         added = added + 1
                                     elseif step.kind == "skill_gate" then
                                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
@@ -31858,6 +31878,53 @@ end
                                         end
                                         task.wait(5)
                                     end
+                                end
+                            elseif step.kind == "orderly_n" then
+                                if not catchup then
+                                    local target_n = math.max(1, math.floor(tonumber(step.count) or 1))
+                                    library:Notify(string.format("Path: Loop Orderly x%d starting...", target_n), 4)
+                                    local done = 0
+                                    while done < target_n
+                                        and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                        and shared and not shared.is_unloading do
+                                        -- wait out of Danger before each cycle, same gate the
+                                        -- always-on "Loop Gain Orderly" toggle uses
+                                        local wait_t0 = os.clock()
+                                        while plr.Character and cs:HasTag(plr.Character, "Danger")
+                                            and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                            and shared and not shared.is_unloading
+                                            and (os.clock() - wait_t0) < 60 do
+                                            task.wait(0.5)
+                                        end
+                                        if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value) or (shared and shared.is_unloading) then
+                                            break
+                                        end
+
+                                        local elixir = plr.Backpack and FindFirstChild(plr.Backpack, "Tespian Elixir")
+                                        if not elixir then
+                                            library:Notify(string.format("Path: Loop Orderly out of Tespian Elixirs (%d/%d done) - continuing path", done, target_n), 6)
+                                            break
+                                        end
+
+                                        pcall(function() plr.Character.Humanoid:EquipTool(elixir) end)
+                                        task.wait(0.3)
+
+                                        local equippedElixir = plr.Character and FindFirstChild(plr.Character, "Tespian Elixir")
+                                        if equippedElixir and FindFirstChild(equippedElixir, "RemoteEvent") then
+                                            equippedElixir.RemoteEvent:FireServer(plr.Character.HumanoidRootPart.CFrame, "Part", "Self")
+                                            task.wait((Options and Options.loop_orderly_delay and Options.loop_orderly_delay.Value) or 2)
+                                            pcall(function() plr.Character:BreakJoints() end)
+
+                                            local immortal_t0 = os.clock()
+                                            repeat task.wait(0.5)
+                                            until FindFirstChild(plr.Character, "Immortal") or (os.clock() - immortal_t0) > 20
+
+                                            done = done + 1
+                                        else
+                                            task.wait(1)
+                                        end
+                                    end
+                                    library:Notify(string.format("Path: Loop Orderly done (%d/%d)", done, target_n), 4)
                                 end
                             elseif step.kind == "reset_if_safe" then
                                 if not catchup then
