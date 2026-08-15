@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 311 loaded - Loop Orderly (N times) now waits out the full respawn (Immortal appear+clear) before the next rep, so the elixir survives to be reused correctly", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 312 loaded - Loop Orderly (N times) now has a retry cap + [ORDERLY] console logging instead of retrying re-equip forever silently", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31883,10 +31883,13 @@ end
                                 if not catchup then
                                     local target_n = math.max(1, math.floor(tonumber(step.count) or 1))
                                     library:Notify(string.format("Path: Loop Orderly x%d starting...", target_n), 4)
+                                    print(string.format("[ORDERLY] starting, target=%d", target_n))
                                     local done = 0
+                                    local equip_fail_streak = 0
                                     while done < target_n
                                         and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
                                         and shared and not shared.is_unloading do
+                                        print(string.format("[ORDERLY] rep %d/%d: checking Danger tag", done, target_n))
                                         -- wait out of Danger before each cycle, same gate the
                                         -- always-on "Loop Gain Orderly" toggle uses
                                         local wait_t0 = os.clock()
@@ -31897,10 +31900,12 @@ end
                                             task.wait(0.5)
                                         end
                                         if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value) or (shared and shared.is_unloading) then
+                                            print("[ORDERLY] path stopped/unloading, exiting")
                                             break
                                         end
 
                                         local elixir = plr.Backpack and FindFirstChild(plr.Backpack, "Tespian Elixir")
+                                        print(string.format("[ORDERLY] rep %d/%d: elixir in backpack = %s", done, target_n, tostring(elixir ~= nil)))
                                         if not elixir then
                                             library:Notify(string.format("Path: Loop Orderly out of Tespian Elixirs (%d/%d done) - continuing path", done, target_n), 6)
                                             break
@@ -31910,8 +31915,12 @@ end
                                         task.wait(0.3)
 
                                         local equippedElixir = plr.Character and FindFirstChild(plr.Character, "Tespian Elixir")
-                                        if equippedElixir and FindFirstChild(equippedElixir, "RemoteEvent") then
+                                        local hasRemote = equippedElixir and FindFirstChild(equippedElixir, "RemoteEvent")
+                                        print(string.format("[ORDERLY] rep %d/%d: equipped=%s hasRemote=%s", done, target_n, tostring(equippedElixir ~= nil), tostring(hasRemote ~= nil)))
+                                        if hasRemote then
+                                            equip_fail_streak = 0
                                             equippedElixir.RemoteEvent:FireServer(plr.Character.HumanoidRootPart.CFrame, "Part", "Self")
+                                            print("[ORDERLY] fired drink remote")
 
                                             -- Deliberately reset BEFORE the server finishes consuming
                                             -- the elixir - that's the whole point (get the drink's
@@ -31921,6 +31930,7 @@ end
                                             -- always-on "Loop Gain Orderly" toggle uses.
                                             task.wait((Options and Options.loop_orderly_delay and Options.loop_orderly_delay.Value) or 2)
                                             pcall(function() plr.Character:BreakJoints() end)
+                                            print("[ORDERLY] BreakJoints called")
 
                                             -- Wait for the respawn's Immortal grace period to both
                                             -- START and FULLY CLEAR before the next rep, so the new
@@ -31931,19 +31941,30 @@ end
                                             local immortal_t0 = os.clock()
                                             repeat task.wait(0.5)
                                             until FindFirstChild(plr.Character, "Immortal") or (os.clock() - immortal_t0) > 20
+                                            print(string.format("[ORDERLY] immortal appeared=%s (%.1fs)", tostring(FindFirstChild(plr.Character, "Immortal") ~= nil), os.clock() - immortal_t0))
 
                                             local clear_t0 = os.clock()
                                             repeat task.wait(0.5)
                                             until not FindFirstChild(plr.Character, "Immortal") or (os.clock() - clear_t0) > 30
+                                            print(string.format("[ORDERLY] immortal cleared (%.1fs)", os.clock() - clear_t0))
 
                                             task.wait(0.5) -- small settle buffer for backpack/character to finish populating
 
                                             done = done + 1
+                                            print(string.format("[ORDERLY] rep complete, done=%d/%d", done, target_n))
                                         else
+                                            equip_fail_streak = equip_fail_streak + 1
+                                            print(string.format("[ORDERLY] equip failed, streak=%d", equip_fail_streak))
+                                            if equip_fail_streak >= 8 then
+                                                library:Notify(string.format("Path: Loop Orderly stuck re-equipping the elixir (%d/%d done) - giving up, continuing path", done, target_n), 6)
+                                                print("[ORDERLY] giving up after repeated equip failures")
+                                                break
+                                            end
                                             task.wait(1)
                                         end
                                     end
                                     library:Notify(string.format("Path: Loop Orderly done (%d/%d)", done, target_n), 4)
+                                    print(string.format("[ORDERLY] finished, done=%d/%d", done, target_n))
                                 end
                             elseif step.kind == "reset_if_safe" then
                                 if not catchup then
