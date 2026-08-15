@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 312 loaded - Loop Orderly (N times) now has a retry cap + [ORDERLY] console logging instead of retrying re-equip forever silently", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 313 loaded - Added Equip Item path waypoint (pick from bag or type a name)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27356,6 +27356,8 @@ end
                         table.insert(steps, { kind = "wait_day", day = step.day })
                     elseif step.kind == "orderly_n" then
                         table.insert(steps, { kind = "orderly_n", count = step.count })
+                    elseif step.kind == "equip_item" then
+                        table.insert(steps, { kind = "equip_item", item_name = step.item_name })
                     elseif step.kind == "skill_gate" then
                         table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27449,6 +27451,8 @@ end
                         table.insert(xp_path, { kind = "wait_day", day = step.day })
                     elseif step.kind == "orderly_n" then
                         table.insert(xp_path, { kind = "orderly_n", count = step.count })
+                    elseif step.kind == "equip_item" then
+                        table.insert(xp_path, { kind = "equip_item", item_name = step.item_name })
                     elseif step.kind == "skill_gate" then
                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27972,7 +27976,7 @@ end
             end)
             group_travel = group_path   -- Path sub-tab
             group_travel:AddDropdown("xpfarm_wp_action", {
-                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Reset If Safe" },
+                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Reset If Safe" },
                 Default = 1, Multi = false, Text = "Waypoint Action",
                 Tooltip = "What the 'Add Waypoint' button below creates",
                 Callback = function(v) selected_action = v end
@@ -28059,6 +28063,32 @@ end
                 Default = "5",
                 Numeric = true,
                 Placeholder = "how many drink+reset cycles to run here"
+            })
+            group_travel:AddDropdown("xpfarm_equip_item_dropdown", {
+                Values = { "(scan your bag first)" },
+                Default = 1, Multi = false, Text = "Equip Item (pick from bag)",
+                Tooltip = "Click 'Scan My Bag' below to list what's currently in your backpack, then pick one here. Or just type a name in the field below instead - typing takes priority if it's not left blank."
+            })
+            group_travel:AddButton("xpfarm_scan_bag", {
+                Text = "Scan My Bag",
+                Tooltip = "Refreshes the dropdown above with whatever Tools are currently in your backpack",
+                Func = function()
+                    local names = {}
+                    if plr.Backpack then
+                        for _, item in ipairs(plr.Backpack:GetChildren()) do
+                            if item:IsA("Tool") then table.insert(names, item.Name) end
+                        end
+                    end
+                    if #names == 0 then names = { "(bag is empty)" } end
+                    table.sort(names)
+                    pcall(function() Options.xpfarm_equip_item_dropdown:SetValues(names) end)
+                    library:Notify(string.format("Scanned bag: found %d item(s)", #names), 3)
+                end
+            })
+            group_travel:AddInput("xpfarm_equip_item_name", {
+                Text = "Or Type Item Name",
+                Default = "",
+                Placeholder = "leave blank to use the dropdown selection above instead"
             })
             group_travel:AddInput("xpfarm_insert_idx", {
                 Text = "Insert At # (blank = end)",
@@ -28212,6 +28242,19 @@ end
                         local at = add_step({ kind = "orderly_n", count = n })
                         update_path_label(); update_viz()
                         library:Notify(string.format("Added Loop Orderly x%d - drinks a Tespian Elixir + resets, %d time(s), then continues (#%d)", n, n, at))
+                        return
+                    end
+                    if selected_action == "Equip Item" then
+                        local typed = (Options.xpfarm_equip_item_name and Options.xpfarm_equip_item_name.Value) or ""
+                        local picked = Options.xpfarm_equip_item_dropdown and Options.xpfarm_equip_item_dropdown.Value
+                        local item_name = typed ~= "" and typed or picked
+                        if not item_name or item_name == "" or item_name == "(scan your bag first)" or item_name == "(bag is empty)" then
+                            library:Notify("Equip Item: type a name, or click Scan My Bag and pick one from the dropdown", 5)
+                            return
+                        end
+                        local at = add_step({ kind = "equip_item", item_name = item_name })
+                        update_path_label(); update_viz()
+                        library:Notify(string.format("Added Equip Item: %s (#%d)", item_name, at))
                         return
                     end
                     local hrp = local_hrp()
@@ -28480,6 +28523,9 @@ end
                                         added = added + 1
                                     elseif step.kind == "orderly_n" then
                                         table.insert(xp_path, { kind = "orderly_n", count = step.count })
+                                        added = added + 1
+                                    elseif step.kind == "equip_item" then
+                                        table.insert(xp_path, { kind = "equip_item", item_name = step.item_name })
                                         added = added + 1
                                     elseif step.kind == "skill_gate" then
                                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
@@ -32103,6 +32149,33 @@ end
                                     library:Notify("Path: no Pickaxe in your bag", 5)
                                 end
                                 task.wait(0.15)
+                            elseif step.kind == "equip_item" then
+                                if not catchup then
+                                    local item_name = step.item_name
+                                    library:Notify(string.format("Path: equipping '%s'...", tostring(item_name)), 3)
+                                    -- The item may have just been handed over by an NPC's dialogue
+                                    -- moments earlier and not have replicated into the backpack yet,
+                                    -- so retry for a bit instead of failing on the first miss.
+                                    local found_tool = nil
+                                    local wait_t0 = os.clock()
+                                    while (os.clock() - wait_t0) < 15
+                                        and Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                        and shared and not shared.is_unloading do
+                                        local char = plr.Character
+                                        found_tool = (char and FindFirstChild(char, item_name))
+                                            or (plr.Backpack and FindFirstChild(plr.Backpack, item_name))
+                                        if found_tool then break end
+                                        task.wait(0.5)
+                                    end
+                                    local hum = plr.Character and FindFirstChildOfClass(plr.Character, "Humanoid")
+                                    if hum and found_tool then
+                                        pcall(function() hum:EquipTool(found_tool) end)
+                                        library:Notify(string.format("Path: '%s' equipped", tostring(item_name)), 3)
+                                    else
+                                        library:Notify(string.format("Path: '%s' not found in bag/character - continuing anyway", tostring(item_name)), 6)
+                                    end
+                                    task.wait(0.15)
+                                end
                             elseif step.cf then
                                 bot_move_to(step.cf.Position)
                                 -- "Skip If Already Armed" NPC (e.g. a starter-sword vendor): still
