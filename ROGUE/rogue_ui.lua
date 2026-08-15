@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 315 loaded - Added Teleport Menu path waypoint (jump+CFrame+spam menu+rejoin, retries if it misses the target)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 316 loaded - Teleport Menu waypoint drops the jump-hop, spams the menu request every frame right after the CFrame set", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32269,29 +32269,22 @@ end
                                             if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value) or (shared and shared.is_unloading) then break end
                                             library:Notify(string.format("Path: Teleport Menu to '%s' (attempt %d/3)...", loc_name, attempt), 3)
 
+                                            -- no jump/hop-up first - straight to the CFrame set, then
+                                            -- race the menu spam against whatever sends you back
+                                            -- (anti-cheat correction/etc). Spam every frame instead
+                                            -- of sleeping between fires, starting immediately.
                                             local root = local_hrp()
-                                            if not root then break end
-                                            local char = plr.Character
-                                            local humanoid = char and FindFirstChildOfClass(char, "Humanoid")
-                                            if humanoid then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end
-                                            root.CFrame = root.CFrame + Vector3.new(0, 50, 0)
-                                            task.wait(0.25)
-
-                                            root = local_hrp()
                                             if not root then break end
                                             root.CFrame = CFrame.new(target_pos)
                                             pcall(function() root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
                                             pcall(function() root.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
 
-                                            -- spam the menu invoke for 1s right after landing, same
-                                            -- as the Teleport tab's own button - a single fire can
-                                            -- miss if the position hasn't settled/replicated yet
                                             local spam_t0 = os.clock()
                                             local fired_ok = false
-                                            while (os.clock() - spam_t0) < 1 do
+                                            while (os.clock() - spam_t0) < 1.5 do
                                                 local ok = pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
                                                 if ok then fired_ok = true end
-                                                task.wait(0.05)
+                                                task.wait()
                                             end
                                             if not fired_ok then
                                                 library:Notify("Path: Teleport Menu - couldn't fire the menu request, retrying", 4)
