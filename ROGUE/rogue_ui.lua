@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 317 loaded - Teleport Menu waypoint now bakes the x/y/z into the step itself instead of depending on a name lookup at run time", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 318 loaded - Teleport Menu waypoint: jump-hop restored before the CFrame set, still spams the menu every frame", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32282,16 +32282,23 @@ end
                                             if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value) or (shared and shared.is_unloading) then break end
                                             library:Notify(string.format("Path: Teleport Menu to '%s' (attempt %d/3)...", loc_name, attempt), 3)
 
-                                            -- no jump/hop-up first - straight to the CFrame set, then
-                                            -- race the menu spam against whatever sends you back
-                                            -- (anti-cheat correction/etc). Spam every frame instead
-                                            -- of sleeping between fires, starting immediately.
                                             local root = local_hrp()
+                                            if not root then break end
+                                            local char = plr.Character
+                                            local humanoid = char and FindFirstChildOfClass(char, "Humanoid")
+                                            if humanoid then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+                                            root.CFrame = root.CFrame + Vector3.new(0, 50, 0)
+                                            task.wait(0.25)
+
+                                            root = local_hrp()
                                             if not root then break end
                                             root.CFrame = CFrame.new(target_pos)
                                             pcall(function() root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
                                             pcall(function() root.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
 
+                                            -- race the menu spam against whatever sends you back
+                                            -- (anti-cheat correction/etc) - spam every frame instead
+                                            -- of sleeping between fires, starting immediately.
                                             local spam_t0 = os.clock()
                                             local fired_ok = false
                                             while (os.clock() - spam_t0) < 1.5 do
