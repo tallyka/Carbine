@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 308 loaded - Fixed 5 more no-timeout WaitForChild calls (AreaMarkers/AreaData/GetMouse/JoinPublicServer/Live) that could hang the script forever", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 309 loaded - Added Loop Orderly On/Off and Wait For Day path waypoints", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27337,6 +27337,7 @@ end
                         or step.kind == "autobag_on" or step.kind == "autobag_off"
                         or step.kind == "instmine_on" or step.kind == "instmine_off"
                         or step.kind == "skipillus_on" or step.kind == "skipillus_off"
+                        or step.kind == "orderly_on" or step.kind == "orderly_off"
                         or step.kind == "equip_pickaxe" or step.kind == "reset_if_safe" then
                         table.insert(steps, { kind = step.kind })
                     elseif step.kind == "repeat_start" then
@@ -27351,6 +27352,8 @@ end
                         table.insert(steps, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
                     elseif step.kind == "wait_timer" then
                         table.insert(steps, { kind = "wait_timer", minutes = step.minutes })
+                    elseif step.kind == "wait_day" then
+                        table.insert(steps, { kind = "wait_day", day = step.day })
                     elseif step.kind == "skill_gate" then
                         table.insert(steps, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27425,6 +27428,7 @@ end
                         or step.kind == "autobag_on" or step.kind == "autobag_off"
                         or step.kind == "instmine_on" or step.kind == "instmine_off"
                         or step.kind == "skipillus_on" or step.kind == "skipillus_off"
+                        or step.kind == "orderly_on" or step.kind == "orderly_off"
                         or step.kind == "equip_pickaxe" or step.kind == "reset_if_safe" then
                         table.insert(xp_path, { kind = step.kind })
                     elseif step.kind == "repeat_start" then
@@ -27439,6 +27443,8 @@ end
                         table.insert(xp_path, { kind = "wait_ingredient", ingredient = step.ingredient, amount = step.amount })
                     elseif step.kind == "wait_timer" then
                         table.insert(xp_path, { kind = "wait_timer", minutes = step.minutes })
+                    elseif step.kind == "wait_day" then
+                        table.insert(xp_path, { kind = "wait_day", day = step.day })
                     elseif step.kind == "skill_gate" then
                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
                     elseif step.kind == "smart_skill_skip" then
@@ -27962,7 +27968,7 @@ end
             end)
             group_travel = group_path   -- Path sub-tab
             group_travel:AddDropdown("xpfarm_wp_action", {
-                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Reset If Safe" },
+                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Reset If Safe" },
                 Default = 1, Multi = false, Text = "Waypoint Action",
                 Tooltip = "What the 'Add Waypoint' button below creates",
                 Callback = function(v) selected_action = v end
@@ -28038,6 +28044,12 @@ end
                 Numeric = true,
                 Placeholder = "how long a Wait Timer waypoint holds here"
             })
+            group_travel:AddInput("xpfarm_wait_day", {
+                Text = "Wait For Day (day #)",
+                Default = "1",
+                Numeric = true,
+                Placeholder = "holds here until DaysSurvived reaches this"
+            })
             group_travel:AddInput("xpfarm_insert_idx", {
                 Text = "Insert At # (blank = end)",
                 Default = "",
@@ -28080,6 +28092,12 @@ end
                     end
                     if selected_action == "Skip Illusionist On" or selected_action == "Skip Illusionist Off" then
                         local at = add_step({ kind = (selected_action == "Skip Illusionist On") and "skipillus_on" or "skipillus_off" })
+                        update_path_label(); update_viz()
+                        library:Notify("Added action: " .. selected_action .. " (#" .. at .. ")")
+                        return
+                    end
+                    if selected_action == "Loop Orderly On" or selected_action == "Loop Orderly Off" then
+                        local at = add_step({ kind = (selected_action == "Loop Orderly On") and "orderly_on" or "orderly_off" })
                         update_path_label(); update_viz()
                         library:Notify("Added action: " .. selected_action .. " (#" .. at .. ")")
                         return
@@ -28170,6 +28188,13 @@ end
                         local at = add_step({ kind = "reset_if_safe" })
                         update_path_label(); update_viz()
                         library:Notify("Added Reset If Safe - resets only when out of Danger (#" .. at .. ")")
+                        return
+                    end
+                    if selected_action == "Wait For Day" then
+                        local day = math.max(1, math.floor(tonumber(Options.xpfarm_wait_day and Options.xpfarm_wait_day.Value) or 1))
+                        local at = add_step({ kind = "wait_day", day = day })
+                        update_path_label(); update_viz()
+                        library:Notify(string.format("Added Wait For Day - holds here until Day %d (#%d)", day, at))
                         return
                     end
                     local hrp = local_hrp()
@@ -28411,6 +28436,7 @@ end
                                         or step.kind == "autobag_on" or step.kind == "autobag_off"
                                         or step.kind == "instmine_on" or step.kind == "instmine_off"
                                         or step.kind == "skipillus_on" or step.kind == "skipillus_off"
+                                        or step.kind == "orderly_on" or step.kind == "orderly_off"
                                         or step.kind == "equip_pickaxe" or step.kind == "reset_if_safe" then
                                         table.insert(xp_path, { kind = step.kind })
                                         added = added + 1
@@ -28431,6 +28457,9 @@ end
                                         added = added + 1
                                     elseif step.kind == "wait_timer" then
                                         table.insert(xp_path, { kind = "wait_timer", minutes = step.minutes })
+                                        added = added + 1
+                                    elseif step.kind == "wait_day" then
+                                        table.insert(xp_path, { kind = "wait_day", day = step.day })
                                         added = added + 1
                                     elseif step.kind == "skill_gate" then
                                         table.insert(xp_path, { kind = "skill_gate", skill = step.skill, skills = step.skills, redo_from = step.redo_from })
@@ -31815,6 +31844,21 @@ end
                                         task.wait(1)
                                     end
                                 end
+                            elseif step.kind == "wait_day" then
+                                if not catchup then
+                                    local target_day = tonumber(step.day) or 1
+                                    library:Notify(string.format("Path: waiting here until Day %d...", target_day), 5)
+                                    while Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                        and shared and not shared.is_unloading do
+                                        local ok, cur = pcall(function()
+                                            return rps.Requests.Get:InvokeServer(utf8.char(65532) .. "\240\159\152\131", "DaysSurvived")["DaysSurvived"]
+                                        end)
+                                        if ok and type(cur) == "number" and cur >= target_day then
+                                            break
+                                        end
+                                        task.wait(5)
+                                    end
+                                end
                             elseif step.kind == "reset_if_safe" then
                                 if not catchup then
                                     if plr.Character and not cs:HasTag(plr.Character, "Danger") then
@@ -31900,6 +31944,15 @@ end
                                 if Toggles.instant_mine then
                                     Toggles.instant_mine:SetValue(step.kind == "instmine_on")
                                     library:Notify(step.kind == "instmine_on" and "Path: Instant Mine ON" or "Path: Instant Mine OFF", 3)
+                                end
+                                task.wait(0.15)
+                            elseif step.kind == "orderly_on" or step.kind == "orderly_off" then
+                                -- toggle "Loop Gain Orderly" mid-path (the potion-drink -> kill
+                                -- farm loop). Lets a path arm it only while standing at the
+                                -- Orderly farm spot and disarm it again before moving on.
+                                if Toggles.loop_orderly then
+                                    Toggles.loop_orderly:SetValue(step.kind == "orderly_on")
+                                    library:Notify(step.kind == "orderly_on" and "Path: Loop Orderly ON" or "Path: Loop Orderly OFF", 3)
                                 end
                                 task.wait(0.15)
                             elseif step.kind == "skipillus_on" or step.kind == "skipillus_off" then
