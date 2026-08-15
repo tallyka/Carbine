@@ -26273,7 +26273,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 318 loaded - Teleport Menu waypoint: jump-hop restored before the CFrame set, still spams the menu every frame", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 319 loaded - Fixed stale Immortal check in Loop Orderly + Teleport Menu clicking Play before it's ready", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32063,9 +32063,22 @@ end
                                             -- respawn and can be reused next rep). Don't wait for
                                             -- consumption here, just the tunable delay - same as the
                                             -- always-on "Loop Gain Orderly" toggle uses.
+                                            local old_character = plr.Character
                                             task.wait((Options and Options.loop_orderly_delay and Options.loop_orderly_delay.Value) or 2)
                                             pcall(function() plr.Character:BreakJoints() end)
                                             print("[ORDERLY] BreakJoints called")
+
+                                            -- Wait for the character reference to actually change
+                                            -- before checking Immortal at all - right after
+                                            -- BreakJoints, plr.Character can still be the OLD (dying)
+                                            -- character for a moment, and if IT already had a leftover
+                                            -- Immortal child from earlier, the check below would read
+                                            -- that stale one and think the new respawn already
+                                            -- finished before it even started.
+                                            local newchar_t0 = os.clock()
+                                            repeat task.wait(0.2)
+                                            until (plr.Character and plr.Character ~= old_character) or (os.clock() - newchar_t0) > 20
+                                            print(string.format("[ORDERLY] new character seen=%s (%.1fs)", tostring(plr.Character ~= old_character), os.clock() - newchar_t0))
 
                                             -- Wait for the respawn's Immortal grace period to both
                                             -- START and FULLY CLEAR before the next rep, so the new
@@ -32312,14 +32325,22 @@ end
                                                 continue
                                             end
 
-                                            pcall(function() plr.PlayerGui:WaitForChild("StartMenu", 30) end)
-                                            if plr.PlayerGui:FindFirstChild("StartMenu") then
-                                                pcall(function()
-                                                    if plr.PlayerGui.StartMenu:FindFirstChild("Choices") and
-                                                       plr.PlayerGui.StartMenu.Choices:FindFirstChild("Play") then
-                                                        firesignal(plr.PlayerGui.StartMenu.Choices.Play.MouseButton1Click)
+                                            -- WaitForChild on StartMenu only guarantees the top-level
+                                            -- GUI object exists, not that Choices/Play (or its own
+                                            -- click-handler connection) have finished setting up
+                                            -- underneath it yet - firing the instant we find them was
+                                            -- clicking Play too early sometimes. Chain WaitForChild
+                                            -- all the way down plus a short settle wait.
+                                            local ok_menu, startMenu = pcall(function() return plr.PlayerGui:WaitForChild("StartMenu", 30) end)
+                                            if ok_menu and startMenu then
+                                                local ok_choices, choices = pcall(function() return startMenu:WaitForChild("Choices", 10) end)
+                                                if ok_choices and choices then
+                                                    local ok_play, playBtn = pcall(function() return choices:WaitForChild("Play", 10) end)
+                                                    if ok_play and playBtn then
+                                                        task.wait(0.5) -- let its click handler actually finish binding
+                                                        pcall(function() firesignal(playBtn.MouseButton1Click) end)
                                                     end
-                                                end)
+                                                end
                                             end
 
                                             -- wait for the character to actually respawn back in,
