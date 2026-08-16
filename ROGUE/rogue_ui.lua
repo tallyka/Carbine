@@ -6673,6 +6673,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
     
                 if(stationType == 'Smithing') then
                     rps.Requests.GetMouse.OnClientInvoke = function()
+                        print("[CRAFTDEBUG] GetMouse.OnClientInvoke fired for Smithing - our override IS being queried")
                         return {
                             Hit = station.Material.CFrame,
                             Target = station.Material,
@@ -6681,6 +6682,24 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             Y = mouse.Y
                         }
                     end;
+
+                    -- Also watch MouseData (Requests:WaitForChild("MouseData"), the one
+                    -- whose Name is a literal null byte) in case Smithing actually queries
+                    -- THAT remote instead of GetMouse - if this fires during a craft
+                    -- attempt while your real mouse is off the anvil, that's the real gap.
+                    pcall(function()
+                        local mouse_data = rps.Requests:FindFirstChild("\000")
+                        if mouse_data and mouse_data:IsA("RemoteFunction") then
+                            local orig = mouse_data.OnClientInvoke
+                            print("[CRAFTDEBUG] Found MouseData remote (null-byte name), watching it too")
+                            mouse_data.OnClientInvoke = function(...)
+                                print("[CRAFTDEBUG] MouseData.OnClientInvoke fired during Smithing craft attempt - this is the REAL mouse, not our override")
+                                if orig then return orig(...) end
+                            end
+                        else
+                            print("[CRAFTDEBUG] No null-byte-named MouseData remote found under Requests")
+                        end
+                    end)
                 end;
     
                 if (stationType == 'Alchemy') then
@@ -26273,7 +26292,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 319 loaded - Fixed stale Immortal check in Loop Orderly + Teleport Menu clicking Play before it's ready", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 321 loaded - Skip Illusionist/Moderator post-hop check now polls up to 10s instead of a single check after a flat 2s wait", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -26656,6 +26675,26 @@ end
                         end
                     end
                 end
+                return nil
+            end
+
+            -- Poll for an Illusionist/moderator over a window instead of a single
+            -- check right after a flat delay. server_has_illusionist/moderator read
+            -- OTHER players' Backpack/Character contents, which can take longer than
+            -- a couple seconds to replicate in a busy server - a check that fires too
+            -- early can miss someone who genuinely is there, silently settling in a
+            -- bad server instead of hopping again. Returns "illusionist"/"moderator"
+            -- (and the Player) the moment one is found, or nil after the window.
+            local function wait_and_check_bad_server(window)
+                window = window or 10
+                local t0 = os.clock()
+                repeat
+                    local illus = server_has_illusionist()
+                    if illus then return "illusionist", illus end
+                    local mod = server_has_moderator()
+                    if mod then return "moderator", mod end
+                    task.wait(1)
+                until (os.clock() - t0) >= window
                 return nil
             end
 
@@ -33450,25 +33489,26 @@ end
                     task.wait(0.25)
                 end
                 if not plr.Character then return end
-                task.wait(2)
-                -- skip illusionist servers: re-arm resume + hop again (keep the saved
-                -- path file intact - don't re-save the not-yet-loaded path)
-                if (mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true") and server_has_illusionist() then
-                    library:Notify("Illusionist in server - hopping again", 5)
-                    pcall(function() mem:SetItem("xpfarm_resume_active", "true") end)
-                    pcall(function() mem:SetItem("xpfarm_resume_idx", tostring(idx)) end)
-                    cheat_client.config.execute_on_serverhop = true
-                    pcall(xpfarm_fast_serverhop)   -- JoinPublicServer (never the freezing utility:Serverhop)
-                    return
-                end
-                -- skip moderator servers: same re-arm + hop again
-                if (mem:HasItem("xpfarm_skip_mod") and mem:GetItem("xpfarm_skip_mod") == "true") and server_has_moderator() then
-                    library:Notify("Moderator in server - hopping again", 5)
-                    pcall(function() mem:SetItem("xpfarm_resume_active", "true") end)
-                    pcall(function() mem:SetItem("xpfarm_resume_idx", tostring(idx)) end)
-                    cheat_client.config.execute_on_serverhop = true
-                    pcall(xpfarm_fast_serverhop)   -- JoinPublicServer (never the freezing utility:Serverhop)
-                    return
+                -- skip illusionist/moderator servers: re-arm resume + hop again (keep the
+                -- saved path file intact - don't re-save the not-yet-loaded path). Polls
+                -- for up to 10s instead of a single check after a flat 2s wait - other
+                -- players' Backpack/Character contents (what these checks read) can take
+                -- longer than that to replicate in a busy server, and checking too early
+                -- was missing Illusionists who really were there.
+                local skip_illus_wanted = mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true"
+                local skip_mod_wanted = mem:HasItem("xpfarm_skip_mod") and mem:GetItem("xpfarm_skip_mod") == "true"
+                if skip_illus_wanted or skip_mod_wanted then
+                    local kind = wait_and_check_bad_server(10)
+                    if (kind == "illusionist" and skip_illus_wanted) or (kind == "moderator" and skip_mod_wanted) then
+                        library:Notify((kind == "illusionist" and "Illusionist" or "Moderator") .. " in server - hopping again", 5)
+                        pcall(function() mem:SetItem("xpfarm_resume_active", "true") end)
+                        pcall(function() mem:SetItem("xpfarm_resume_idx", tostring(idx)) end)
+                        cheat_client.config.execute_on_serverhop = true
+                        pcall(xpfarm_fast_serverhop)   -- JoinPublicServer (never the freezing utility:Serverhop)
+                        return
+                    end
+                else
+                    task.wait(2)
                 end
                 if load_xpfarm_path("__carbine_resume") then
                     -- resume from the saved waypoint (not nearest-to-spawn, which is unreliable
@@ -33685,18 +33725,18 @@ end
                         task.wait(0.25)
                     end
                     if not plr.Character then return end
-                    task.wait(2)
-                    if (mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true") and server_has_illusionist() then
-                        library:Notify("Illusionist in server - hopping again", 5)
-                        cheat_client.config.execute_on_serverhop = true
-                        pcall(xpfarm_fast_serverhop)   -- JoinPublicServer (never the freezing utility:Serverhop)
-                        return
-                    end
-                    if (mem:HasItem("xpfarm_skip_mod") and mem:GetItem("xpfarm_skip_mod") == "true") and server_has_moderator() then
-                        library:Notify("Moderator in server - hopping again", 5)
-                        cheat_client.config.execute_on_serverhop = true
-                        pcall(xpfarm_fast_serverhop)   -- JoinPublicServer (never the freezing utility:Serverhop)
-                        return
+                    local skip_illus_wanted2 = mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true"
+                    local skip_mod_wanted2 = mem:HasItem("xpfarm_skip_mod") and mem:GetItem("xpfarm_skip_mod") == "true"
+                    if skip_illus_wanted2 or skip_mod_wanted2 then
+                        local kind2 = wait_and_check_bad_server(10)
+                        if (kind2 == "illusionist" and skip_illus_wanted2) or (kind2 == "moderator" and skip_mod_wanted2) then
+                            library:Notify((kind2 == "illusionist" and "Illusionist" or "Moderator") .. " in server - hopping again", 5)
+                            cheat_client.config.execute_on_serverhop = true
+                            pcall(xpfarm_fast_serverhop)   -- JoinPublicServer (never the freezing utility:Serverhop)
+                            return
+                        end
+                    else
+                        task.wait(2)
                     end
                     run_stage()
                 end)
