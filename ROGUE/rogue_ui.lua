@@ -26292,7 +26292,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 321 loaded - Skip Illusionist/Moderator post-hop check now polls up to 10s instead of a single check after a flat 2s wait", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 322 loaded - Fixed a compile failure (200-local register limit) by wrapping Teleport Menu/Loop Orderly/Equip Item in their own nested functions", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32054,6 +32054,11 @@ end
                                     end
                                 end
                             elseif step.kind == "orderly_n" then
+                              -- Wrapped in a genuine nested function (not just do...end) so its
+                              -- locals get their own fresh register scope instead of adding to
+                              -- this already-near-the-limit closure's peak concurrent count
+                              -- (see BUILD 219/229/230/231's compile-failure history above).
+                              pcall(function()
                                 if not catchup then
                                     local target_n = math.max(1, math.floor(tonumber(step.count) or 1))
                                     library:Notify(string.format("Path: Loop Orderly x%d starting...", target_n), 4)
@@ -32153,6 +32158,7 @@ end
                                     library:Notify(string.format("Path: Loop Orderly done (%d/%d)", done, target_n), 4)
                                     print(string.format("[ORDERLY] finished, done=%d/%d", done, target_n))
                                 end
+                              end)
                             elseif step.kind == "reset_if_safe" then
                                 if not catchup then
                                     if plr.Character and not cs:HasTag(plr.Character, "Danger") then
@@ -32291,6 +32297,7 @@ end
                                 end
                                 task.wait(0.15)
                             elseif step.kind == "equip_item" then
+                              pcall(function()
                                 if not catchup then
                                     local item_name = step.item_name
                                     library:Notify(string.format("Path: equipping '%s'...", tostring(item_name)), 3)
@@ -32317,7 +32324,13 @@ end
                                     end
                                     task.wait(0.15)
                                 end
+                              end)
                             elseif step.kind == "tp_menu" then
+                              -- Wrapped in a genuine nested function (not just do...end) so its
+                              -- ~17 locals get their own fresh register scope instead of adding
+                              -- to this already-near-the-limit closure's peak concurrent count
+                              -- (see BUILD 219/229/230/231's compile-failure history above).
+                              pcall(function()
                                 if not catchup then
                                     -- x/y/z are baked into the step itself at Add Waypoint time,
                                     -- not looked up by name at run time - so this doesn't depend
@@ -32412,6 +32425,7 @@ end
                                     end
                                     task.wait(0.3)
                                 end
+                              end)
                             elseif step.cf then
                                 bot_move_to(step.cf.Position)
                                 -- "Skip If Already Armed" NPC (e.g. a starter-sword vendor): still
