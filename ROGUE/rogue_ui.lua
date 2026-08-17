@@ -26292,7 +26292,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 322 loaded - Fixed a compile failure (200-local register limit) by wrapping Teleport Menu/Loop Orderly/Equip Item in their own nested functions", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 323 loaded - Fixed the real cause of the compile failure: wait_and_check_bad_server was a new named local in the already-at-200 shared scope, now moved into its own isolated closures", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -26675,26 +26675,6 @@ end
                         end
                     end
                 end
-                return nil
-            end
-
-            -- Poll for an Illusionist/moderator over a window instead of a single
-            -- check right after a flat delay. server_has_illusionist/moderator read
-            -- OTHER players' Backpack/Character contents, which can take longer than
-            -- a couple seconds to replicate in a busy server - a check that fires too
-            -- early can miss someone who genuinely is there, silently settling in a
-            -- bad server instead of hopping again. Returns "illusionist"/"moderator"
-            -- (and the Player) the moment one is found, or nil after the window.
-            local function wait_and_check_bad_server(window)
-                window = window or 10
-                local t0 = os.clock()
-                repeat
-                    local illus = server_has_illusionist()
-                    if illus then return "illusionist", illus end
-                    local mod = server_has_moderator()
-                    if mod then return "moderator", mod end
-                    task.wait(1)
-                until (os.clock() - t0) >= window
                 return nil
             end
 
@@ -33509,6 +33489,20 @@ end
                 -- players' Backpack/Character contents (what these checks read) can take
                 -- longer than that to replicate in a busy server, and checking too early
                 -- was missing Illusionists who really were there.
+                -- (Defined here, inside this closure, so it doesn't add a local to the
+                -- outer function's 200-local cap - see reapply_toggle_state above.)
+                local function wait_and_check_bad_server(window)
+                    window = window or 10
+                    local t0 = os.clock()
+                    repeat
+                        local illus = server_has_illusionist()
+                        if illus then return "illusionist", illus end
+                        local mod = server_has_moderator()
+                        if mod then return "moderator", mod end
+                        task.wait(1)
+                    until (os.clock() - t0) >= window
+                    return nil
+                end
                 local skip_illus_wanted = mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true"
                 local skip_mod_wanted = mem:HasItem("xpfarm_skip_mod") and mem:GetItem("xpfarm_skip_mod") == "true"
                 if skip_illus_wanted or skip_mod_wanted then
@@ -33739,10 +33733,24 @@ end
                         task.wait(0.25)
                     end
                     if not plr.Character then return end
+                    -- (Defined here, inside this closure, so it doesn't add a local to the
+                    -- outer function's 200-local cap.)
+                    local function wait_and_check_bad_server2(window)
+                        window = window or 10
+                        local t0 = os.clock()
+                        repeat
+                            local illus = server_has_illusionist()
+                            if illus then return "illusionist", illus end
+                            local mod = server_has_moderator()
+                            if mod then return "moderator", mod end
+                            task.wait(1)
+                        until (os.clock() - t0) >= window
+                        return nil
+                    end
                     local skip_illus_wanted2 = mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true"
                     local skip_mod_wanted2 = mem:HasItem("xpfarm_skip_mod") and mem:GetItem("xpfarm_skip_mod") == "true"
                     if skip_illus_wanted2 or skip_mod_wanted2 then
-                        local kind2 = wait_and_check_bad_server(10)
+                        local kind2 = wait_and_check_bad_server2(10)
                         if (kind2 == "illusionist" and skip_illus_wanted2) or (kind2 == "moderator" and skip_mod_wanted2) then
                             library:Notify((kind2 == "illusionist" and "Illusionist" or "Moderator") .. " in server - hopping again", 5)
                             cheat_client.config.execute_on_serverhop = true
