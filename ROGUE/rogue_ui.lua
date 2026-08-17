@@ -14631,6 +14631,11 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 local emergency_serverhop_connection
                 local emergency_conditions = Options.EmergencyServerhopConditions and Options.EmergencyServerhopConditions.Value or {}
 
+                do
+                    local ec_names = {}
+                    for k, v in pairs(emergency_conditions) do if v then table.insert(ec_names, k) end end
+                    print(string.format("[ILLUSDEBUG2] emergency_conditions = {%s}", table.concat(ec_names, ", ")))
+                end
                 if next(emergency_conditions) ~= nil then
                     local stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false
                     if not stay_in_server then
@@ -14649,6 +14654,10 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     end
 
                     emergency_serverhop_connection = track_connection("emergency_serverhop", utility:Connection(ws.Live.DescendantAdded, function(descendant)
+                        if descendant:IsA("Tool") then
+                            print(string.format("[ILLUSDEBUG2] ws.Live saw Tool added: %s (path_running=%s)",
+                                descendant.Name, tostring(trinket_bot.path_running)))
+                        end
                         if not trinket_bot.path_running then return end
                         local stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false
                         if stay_in_server then return end
@@ -17198,8 +17207,16 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
             group_trinket_bot:AddToggle("SkipIllusionist", {
                 Text = "Skip Illusionist Servers",
-                Default = false
+                Default = false,
+                Callback = function(v)
+                    print(string.format("[ILLUSDEBUG2] SkipIllusionist Callback fired: v=%s (from click or SetValue)", tostring(v)))
+                end
             })
+            pcall(function()
+                Toggles.SkipIllusionist:OnChanged(function()
+                    print(string.format("[ILLUSDEBUG2] SkipIllusionist OnChanged: now %s", tostring(Toggles.SkipIllusionist.Value)))
+                end)
+            end)
 
             group_trinket_bot:AddDropdown("PickupMythicsArtifacts", {
                 Text = "Pick up Mythics/Artifacts",
@@ -26390,7 +26407,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 334 loaded - Added full checkpoint tracing through ExecutePath to find exactly where Skip Illusionist detection stops firing", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 336 loaded - Added tracing to Emergency Serverhop's ws.Live.DescendantAdded watcher and the conditions list itself", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
