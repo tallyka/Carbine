@@ -26292,7 +26292,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 323 loaded - Fixed the real cause of the compile failure: wait_and_check_bad_server was a new named local in the already-at-200 shared scope, now moved into its own isolated closures", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 324 loaded - Live mid-session Illusionist check now mirrors the emergency-serverhop pattern directly, plus [ILLUSDEBUG] console diagnostics", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -33768,10 +33768,31 @@ end
             local last_inn_time = 0
             local hop_started = false
             task.spawn(function()
+                local illusdebug_last_print = 0
                 while shared and not shared.is_unloading do
                     task.wait(0.5)
                     local char = plr.Character
                     if char then
+                        -- [ILLUSDEBUG] throttled heartbeat so we can see, from real
+                        -- console output, whether this loop is actually alive and what
+                        -- it thinks bot_running/skip_illus/server_has_illusionist() are
+                        -- at the moment someone joins mid-session - printed every 5s so
+                        -- it doesn't spam, plus immediately whenever server_has_illusionist()
+                        -- returns non-nil regardless of the other gates.
+                        do
+                            local dbg_illus = server_has_illusionist()
+                            local dbg_bot_running = (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value)
+                                or (Toggles.xpfarm_master and Toggles.xpfarm_master.Value)
+                            local dbg_skip_wanted = mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true"
+                            if dbg_illus then
+                                print(string.format("[ILLUSDEBUG] server_has_illusionist()=%s bot_running=%s skip_illus_wanted=%s",
+                                    tostring(dbg_illus.Name), tostring(dbg_bot_running), tostring(dbg_skip_wanted)))
+                            elseif os.clock() - illusdebug_last_print > 5 then
+                                illusdebug_last_print = os.clock()
+                                print(string.format("[ILLUSDEBUG] heartbeat: no illusionist found, bot_running=%s skip_illus_wanted=%s, players=%d",
+                                    tostring(dbg_bot_running), tostring(dbg_skip_wanted), #plrs:GetPlayers()))
+                            end
+                        end
                         if Toggles.xpfarm_kick_near and Toggles.xpfarm_kick_near.Value then
                             local hrp = FindFirstChild(char, "HumanoidRootPart")
                             if hrp then
@@ -33827,12 +33848,37 @@ end
                             end
                         end
 
-                        -- live skip illusionist / moderator: leave if one is in the server now
+                        -- live skip illusionist / moderator: leave if one is in the server now.
+                        -- Illusionist check mirrors the emergency-serverhop pattern directly
+                        -- above (inline scan of other.Character:GetChildren() for a held
+                        -- Tool) instead of going through server_has_illusionist(), since that
+                        -- pattern is the one proven to reliably catch someone who joins/draws
+                        -- their tool mid-session.
+                        if bot_running and mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true" then
+                            for _, other in ipairs(plrs:GetPlayers()) do
+                                if other ~= plr and other.Character then
+                                    local has_observe
+                                    for _, tool in ipairs(other.Character:GetChildren()) do
+                                        if tool:IsA("Tool") and tool.Name == "Observe" then has_observe = true; break end
+                                    end
+                                    if not has_observe then
+                                        local bp = other:FindFirstChildOfClass("Backpack")
+                                        if bp then
+                                            for _, tool in ipairs(bp:GetChildren()) do
+                                                if tool:IsA("Tool") and tool.Name == "Observe" then has_observe = true; break end
+                                            end
+                                        end
+                                    end
+                                    if has_observe then
+                                        library:Notify(string.format("%s is an Illusionist - serverhopping", other.Name), 5)
+                                        do_path_serverhop(path_idx > 0 and path_idx or 1)
+                                        break
+                                    end
+                                end
+                            end
+                        end
                         if bot_running then
-                            if (mem:HasItem("xpfarm_skip_illus") and mem:GetItem("xpfarm_skip_illus") == "true") and server_has_illusionist() then
-                                library:Notify("Illusionist in server - serverhopping", 5)
-                                do_path_serverhop(path_idx > 0 and path_idx or 1)
-                            elseif (mem:HasItem("xpfarm_skip_mod") and mem:GetItem("xpfarm_skip_mod") == "true") and server_has_moderator() then
+                            if (mem:HasItem("xpfarm_skip_mod") and mem:GetItem("xpfarm_skip_mod") == "true") and server_has_moderator() then
                                 library:Notify("Moderator in server - serverhopping", 5)
                                 do_path_serverhop(path_idx > 0 and path_idx or 1)
                             end
