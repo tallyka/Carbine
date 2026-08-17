@@ -14543,15 +14543,17 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     -- any of those three events). This is what was letting an Illusionist
                     -- observe someone with zero detection/notification. Poll every 1s as a
                     -- catch-all on top of the event-driven watchers above.
-                    -- Wrapped in an IIFE so illu_poll_thread is scoped to this nested
-                    -- function, not added as a new named local to ExecutePath's own
-                    -- scope (which compile-failed once already this session from adding
-                    -- new top-level locals to an already-near-the-limit closure).
-                    -- Leading ';' required: without it, Lua parses the previous
-                    -- table.insert(...) call and this (function()...end)() as ONE
-                    -- continuous call chain (table.insert(...)(function()...end)()),
-                    -- which is exactly the "ambiguous syntax" error this hit.
-                    ;(function()
+                    -- Wrapped in pcall(function()...end) so illu_poll_thread is scoped
+                    -- to a genuine nested function, not added as a new named local to
+                    -- ExecutePath's own scope (which compile-failed once already this
+                    -- session from adding new top-level locals to an already-near-the-
+                    -- limit closure). Starting with "pcall" (an identifier) rather than
+                    -- a bare "(" also avoids the ambiguous-syntax error a bare leading
+                    -- paren caused right after the previous table.insert(...) call -
+                    -- and unlike a plain "do...end", pcall's anonymous function IS a
+                    -- real register scope, so illu_poll_thread genuinely doesn't count
+                    -- against ExecutePath's own local budget here.
+                    pcall(function()
                         local illu_poll_thread = task.spawn(function()
                             while Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value
                                 and shared and not shared.is_unloading do
@@ -14566,7 +14568,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             end
                         end)
                         table.insert(illu_connections, { Disconnect = function() task.cancel(illu_poll_thread) end })
-                    end)()
+                    end)
                 end
 
                 proximity_warnings = {}
@@ -26325,7 +26327,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 328 loaded - Fixed ambiguous syntax error from the IIFE wrap (leading semicolon before the bare '(function()')", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 329 loaded - Replaced the bare IIFE with pcall(function()...end) for the illusionist poll fallback (fixes both the syntax error and the register scoping)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
