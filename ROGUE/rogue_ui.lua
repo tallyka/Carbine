@@ -26362,7 +26362,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 331 loaded - Removed the fetch_dependency named local (it was in the same shared scope as run_stage), inlined as per-call IIFEs instead", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 332 loaded - Run Druid Bot now uses 'druid_combined', added Show Druid Path Start marker button", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -29674,10 +29674,10 @@ end
                 g:AddDivider()
                 g:AddButton("classbot_run_druid", {
                     Text = "Run Druid Bot",
-                    Tooltip = "One-click: loads the 'druid' saved path and starts it immediately - no need to pick it from the dropdown above. Auto-resumes through every serverhop like any other class path.",
+                    Tooltip = "One-click: loads the 'druid_combined' saved path and starts it immediately - no need to pick it from the dropdown above. Auto-resumes through every serverhop like any other class path.",
                     Func = function()
-                        if not load_xpfarm_path("druid") then library:Notify("Class bot: missing 'druid' saved path", 8); return end
-                        if #xp_path == 0 then library:Notify("The 'druid' path is empty"); return end
+                        if not load_xpfarm_path("druid_combined") then library:Notify("Class bot: missing 'druid_combined' saved path", 8); return end
+                        if #xp_path == 0 then library:Notify("The 'druid_combined' path is empty"); return end
                         -- fresh start - clear any leftover Make Potions progress/retry counters
                         -- and Repeat block counts from a previous run (see classbot_run above).
                         for idx, s in ipairs(xp_path) do
@@ -29689,8 +29689,65 @@ end
                             end
                         end
                         if Toggles.xpfarm_path_run then Toggles.xpfarm_path_run:SetValue(true) end
-                        pcall(function() cb_status:SetText("Running: druid  (" .. #xp_path .. " steps)") end)
+                        pcall(function() cb_status:SetText("Running: druid_combined  (" .. #xp_path .. " steps)") end)
                         library:Notify(string.format("Druid Bot running (%d steps)", #xp_path), 6)
+                    end
+                })
+                g:AddButton("classbot_show_druid_first_point", {
+                    Text = "Show Druid Path Start",
+                    Tooltip = "Reads the 'druid_combined' saved path from disk and drops a temporary glowing marker at its first waypoint, without loading/starting the path - just to see where it begins.",
+                    Func = function()
+                        if not (readfile and isfile) then library:Notify("This executor doesn't support readfile", 6); return end
+                        local file_path = "HYDROXIDE/xpfarm_paths/druid_combined.json"
+                        if not isfile(file_path) then library:Notify("No 'druid_combined' saved path found on disk", 6); return end
+
+                        local ok, data = pcall(function()
+                            return Services.HttpService:JSONDecode(readfile(file_path))
+                        end)
+                        if not ok or type(data) ~= "table" or type(data.steps) ~= "table" then
+                            library:Notify("Couldn't read 'druid_combined' - file may be corrupt", 6)
+                            return
+                        end
+
+                        local first
+                        for _, step in ipairs(data.steps) do
+                            if step.x and step.y and step.z then first = step; break end
+                        end
+                        if not first then
+                            library:Notify("'druid_combined' has no positioned waypoints", 6)
+                            return
+                        end
+
+                        local pos = Vector3.new(first.x, first.y, first.z)
+                        library:Notify(string.format("Druid path starts at %.0f, %.0f, %.0f", pos.X, pos.Y, pos.Z), 8)
+
+                        pcall(function()
+                            local marker = Instance.new("Part")
+                            marker.Name = "DruidStartMarker"
+                            marker.Shape = Enum.PartType.Ball
+                            marker.Size = Vector3.new(4, 4, 4)
+                            marker.Position = pos
+                            marker.Anchored = true
+                            marker.CanCollide = false
+                            marker.Material = Enum.Material.Neon
+                            marker.Color = Color3.fromRGB(60, 255, 120)
+                            marker.Transparency = 0.15
+                            marker.Parent = ws
+
+                            local beam_part = Instance.new("Part")
+                            beam_part.Name = "DruidStartBeam"
+                            beam_part.Size = Vector3.new(1, 300, 1)
+                            beam_part.CFrame = CFrame.new(pos + Vector3.new(0, 150, 0))
+                            beam_part.Anchored = true
+                            beam_part.CanCollide = false
+                            beam_part.Material = Enum.Material.Neon
+                            beam_part.Color = Color3.fromRGB(60, 255, 120)
+                            beam_part.Transparency = 0.6
+                            beam_part.Parent = ws
+
+                            game.Debris:AddItem(marker, 20)
+                            game.Debris:AddItem(beam_part, 20)
+                        end)
                     end
                 })
 
