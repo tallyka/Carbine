@@ -14534,6 +14534,29 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         table.insert(illu_connections, char_added_conn)
                     end)
                     table.insert(illu_connections, player_added_conn)
+
+                    -- Periodic fallback poll: PlayerAdded/CharacterAdded/Backpack.ChildAdded
+                    -- only catch a NEW join, a respawn, or a NEW item appearing in the bag -
+                    -- none of them fire when someone who's been in the server the whole
+                    -- session simply EQUIPS an Observe they already had sitting in their
+                    -- backpack (that moves the Tool from Backpack to Character, which isn't
+                    -- any of those three events). This is what was letting an Illusionist
+                    -- observe someone with zero detection/notification. Poll every 1s as a
+                    -- catch-all on top of the event-driven watchers above.
+                    local illu_poll_thread = task.spawn(function()
+                        while Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value
+                            and shared and not shared.is_unloading do
+                            task.wait(1)
+                            for _, other_player in next, plrs:GetPlayers() do
+                                if other_player ~= plr and has_observe(other_player) then
+                                    library:Notify("Illusionist detected (poll)! Serverhopping.")
+                                    TrinketBotServerhop(string.format("Illusionist detected (poll); %s has Observe - Serverhopping", other_player.Name))
+                                    return
+                                end
+                            end
+                        end
+                    end)
+                    table.insert(illu_connections, { Disconnect = function() task.cancel(illu_poll_thread) end })
                 end
 
                 proximity_warnings = {}
@@ -26292,7 +26315,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 324 loaded - Live mid-session Illusionist check now mirrors the emergency-serverhop pattern directly, plus [ILLUSDEBUG] console diagnostics", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 325 loaded - Trinket Bot's Skip Illusionist now has a 1s poll fallback for someone who equips Observe mid-session without joining/respawning", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
