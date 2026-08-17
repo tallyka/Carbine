@@ -17195,9 +17195,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             group_trinket_bot:AddDropdown("EmergencyServerhopConditions", {
                 Text = "Emergency Serverhop Conditions",
                 Tooltip = "Select items that trigger instant serverhop when equipped by another player (no emergency gate)",
-                Values = {"Perflora", "Pebble", "Celeritas", "Fimbulvetr"},
+                Values = {"Perflora", "Pebble", "Celeritas", "Fimbulvetr", "Observe"},
                 Multi = true,
-                Default = {"Perflora", "Pebble", "Celeritas", "Fimbulvetr"},
+                Default = {"Perflora", "Pebble", "Celeritas", "Fimbulvetr", "Observe"},
                 Compact = true
             })
 
@@ -26315,7 +26315,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 325 loaded - Trinket Bot's Skip Illusionist now has a 1s poll fallback for someone who equips Observe mid-session without joining/respawning", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 326 loaded - Added Observe to Emergency Serverhop Conditions (equip-triggered, more reliable than the dedicated Illusionist watchers alone)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
