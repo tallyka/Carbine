@@ -14636,6 +14636,53 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     for k, v in pairs(emergency_conditions) do if v then table.insert(ec_names, k) end end
                     print(string.format("[ILLUSDEBUG2] emergency_conditions = {%s}", table.concat(ec_names, ", ")))
                 end
+
+                -- Observe (Illusionist) detection, hardcoded and completely independent
+                -- of the EmergencyServerhopConditions dropdown/config. Confirmed via
+                -- [ILLUSDEBUG2] logs that the dropdown's saved selection was silently
+                -- reverting to an older list without "Observe" on some script reloads
+                -- (real illusionists equipping Observe were being seen by ws.Live but
+                -- skipped because the dropdown value didn't include it at that moment) -
+                -- this is safety-critical (ban risk if missed), so it does not depend on
+                -- any toggle/dropdown state persisting correctly at all.
+                do
+                    for _, other_player in next, plrs:GetPlayers() do
+                        if other_player ~= plr and other_player.Character then
+                            for _, tool in next, other_player.Character:GetChildren() do
+                                if tool:IsA("Tool") and tool.Name == "Observe" then
+                                    library:Notify(string.format("Player %s already has Observe - instant serverhop!", other_player.Name))
+                                    trinket_bot.path_running = false
+                                    TrinketBotServerhop(string.format("Player %s (%s) has Observe - instant serverhop (detected on bot start, hardcoded)", other_player.Name, other_player.UserId))
+                                    break
+                                end
+                            end
+                        end
+                    end
+                    track_connection("observe_hardcoded", utility:Connection(ws.Live.DescendantAdded, function(descendant)
+                        if not (descendant:IsA("Tool") and descendant.Name == "Observe") then return end
+                        if not trinket_bot.path_running then return end
+                        local stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false
+                        if stay_in_server then return end
+
+                        local owner_player = nil
+                        local ancestor = descendant.Parent
+                        while ancestor and ancestor ~= ws.Live do
+                            if ancestor:IsA("Model") then
+                                owner_player = plrs:GetPlayerFromCharacter(ancestor)
+                                if owner_player then break end
+                            end
+                            ancestor = ancestor.Parent
+                        end
+
+                        if owner_player and owner_player ~= plr then
+                            print("[ILLUSDEBUG2] hardcoded Observe watcher caught " .. owner_player.Name .. " - hopping")
+                            library:Notify(string.format("Player %s has Observe - instant serverhop!", owner_player.Name))
+                            trinket_bot.path_running = false
+                            TrinketBotServerhop(string.format("Player %s (%s) has Observe - instant serverhop (hardcoded)", owner_player.Name, owner_player.UserId))
+                        end
+                    end))
+                end
+
                 if next(emergency_conditions) ~= nil then
                     local stay_in_server = Toggles.StayInServer and Toggles.StayInServer.Value or false
                     if not stay_in_server then
@@ -26407,7 +26454,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 336 loaded - Added tracing to Emergency Serverhop's ws.Live.DescendantAdded watcher and the conditions list itself", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 337 loaded - Observe/Illusionist detection is now hardcoded, independent of the flaky EmergencyServerhopConditions dropdown state", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
