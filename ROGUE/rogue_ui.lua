@@ -14486,7 +14486,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     glassmask_thrown_connection = track_connection("glassmask_thrown", utility:Connection(workspace.Thrown.ChildAdded, handle_glassmask_detection))
                 end
 
+                print(string.format("[ILLUSDEBUG2] ExecutePath: SkipIllusionist toggle=%s", tostring(Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value)))
                 if Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value then
+                    print(string.format("[ILLUSDEBUG2] setting up watchers for %d other player(s)", #plrs:GetPlayers() - 1))
                     for _, other_player in next, plrs:GetPlayers() do
                         if other_player ~= plr then
                             task.spawn(function()
@@ -14579,18 +14581,35 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     -- real register scope, so illu_poll_thread genuinely doesn't count
                     -- against ExecutePath's own local budget here.
                     pcall(function()
+                        print("[ILLUSDEBUG2] poll fallback thread starting")
                         local illu_poll_thread = task.spawn(function()
+                            local poll_tick = 0
                             while Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value
                                 and shared and not shared.is_unloading do
                                 task.wait(1)
+                                poll_tick = poll_tick + 1
+                                local found_name = nil
                                 for _, other_player in next, plrs:GetPlayers() do
                                     if other_player ~= plr and has_observe(other_player) then
-                                        library:Notify("Illusionist detected (poll)! Serverhopping.")
-                                        TrinketBotServerhop(string.format("Illusionist detected (poll); %s has Observe - Serverhopping", other_player.Name))
-                                        return
+                                        found_name = other_player.Name
+                                        break
                                     end
                                 end
+                                if poll_tick % 5 == 0 then
+                                    print(string.format("[ILLUSDEBUG2] poll tick %d: toggle=%s found=%s players=%d",
+                                        poll_tick, tostring(Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value),
+                                        tostring(found_name), #plrs:GetPlayers()))
+                                end
+                                if found_name then
+                                    library:Notify("Illusionist detected (poll)! Serverhopping.")
+                                    print("[ILLUSDEBUG2] poll found " .. found_name .. " - calling TrinketBotServerhop")
+                                    TrinketBotServerhop(string.format("Illusionist detected (poll); %s has Observe - Serverhopping", found_name))
+                                    return
+                                end
                             end
+                            print(string.format("[ILLUSDEBUG2] poll thread exiting - toggle=%s unloading=%s",
+                                tostring(Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value),
+                                tostring(shared and shared.is_unloading)))
                         end)
                         table.insert(illu_connections, { Disconnect = function() task.cancel(illu_poll_thread) end })
                     end)
@@ -26362,7 +26381,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 332 loaded - Run Druid Bot now uses 'druid_combined', added Show Druid Path Start marker button", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 333 loaded - Added [ILLUSDEBUG2] diagnostics to Trinket Bot's Skip Illusionist setup + poll loop to find why it's still not hopping", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
