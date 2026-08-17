@@ -3189,8 +3189,23 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
     end
     
     local repo = "https://raw.githubusercontent.com/tallyka/Carbine/refs/heads/main/"
+
+    -- Local-first: if HYDROXIDE/DEPENDENCIES/<file> exists on disk, read and
+    -- compile that instead of fetching from GitHub - keeps this working even
+    -- while raw.githubusercontent.com is rate-limited (429), and is just
+    -- faster in general when the files are already there. Falls back to the
+    -- normal HttpGet fetch if the local file isn't present, so this stays
+    -- safe for anyone who hasn't saved local copies.
+    local function fetch_dependency(filename)
+        if isfile and readfile and isfile("HYDROXIDE/DEPENDENCIES/" .. filename) then
+            local ok, src = pcall(readfile, "HYDROXIDE/DEPENDENCIES/" .. filename)
+            if ok and src then return src end
+        end
+        return game:HttpGet(repo .. "DEPENDENCIES/" .. filename, true)
+    end
+
     local success, library_func = pcall(function()
-        return loadstring(game:HttpGet(repo .. "DEPENDENCIES/Library.lua", true))()
+        return loadstring(fetch_dependency("Library.lua"))()
     end)
 
     if success then
@@ -3201,8 +3216,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
         getgenv().Options = library.Options or {}
         getgenv().Labels = library.Labels or {}
 
-        local SaveManager = loadstring(game:HttpGet(repo .. "DEPENDENCIES/SaveManager.lua"))()
-        local ThemeManager = loadstring(game:HttpGet(repo .. "DEPENDENCIES/ThemeManager.lua"))()
+        local SaveManager = loadstring(fetch_dependency("SaveManager.lua"))()
+        local ThemeManager = loadstring(fetch_dependency("ThemeManager.lua"))()
 
         SaveManager:SetLibrary(library)
         ThemeManager:SetLibrary(library)
@@ -20366,7 +20381,17 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     Callback = function(state)
                         if state then
                             local success, result = pcall(function()
-                                local LoggerGui = loadstring(game:HttpGet(repo .. "DEPENDENCIES/Chatlogger.lua"))()
+                                -- local-first, same reasoning as the Library/SaveManager/
+                                -- ThemeManager fetches near the top of the file - inlined
+                                -- rather than reusing that scope's helper, to stay self-
+                                -- contained inside this already-isolated Callback closure.
+                                local src
+                                if isfile and readfile and isfile("HYDROXIDE/DEPENDENCIES/Chatlogger.lua") then
+                                    local ok, local_src = pcall(readfile, "HYDROXIDE/DEPENDENCIES/Chatlogger.lua")
+                                    if ok and local_src then src = local_src end
+                                end
+                                src = src or game:HttpGet(repo .. "DEPENDENCIES/Chatlogger.lua", true)
+                                local LoggerGui = loadstring(src)()
                                 return LoggerGui.new(cheat_client, utility)
                             end)
 
@@ -26327,7 +26352,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 329 loaded - Replaced the bare IIFE with pcall(function()...end) for the illusionist poll fallback (fixes both the syntax error and the register scoping)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 330 loaded - Library/SaveManager/ThemeManager/Chatlogger now read from HYDROXIDE/DEPENDENCIES/ locally first, falling back to GitHub only if not found", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
