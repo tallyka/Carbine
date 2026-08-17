@@ -14543,20 +14543,26 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     -- any of those three events). This is what was letting an Illusionist
                     -- observe someone with zero detection/notification. Poll every 1s as a
                     -- catch-all on top of the event-driven watchers above.
-                    local illu_poll_thread = task.spawn(function()
-                        while Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value
-                            and shared and not shared.is_unloading do
-                            task.wait(1)
-                            for _, other_player in next, plrs:GetPlayers() do
-                                if other_player ~= plr and has_observe(other_player) then
-                                    library:Notify("Illusionist detected (poll)! Serverhopping.")
-                                    TrinketBotServerhop(string.format("Illusionist detected (poll); %s has Observe - Serverhopping", other_player.Name))
-                                    return
+                    -- Wrapped in an IIFE so illu_poll_thread is scoped to this nested
+                    -- function, not added as a new named local to ExecutePath's own
+                    -- scope (which compile-failed once already this session from adding
+                    -- new top-level locals to an already-near-the-limit closure).
+                    (function()
+                        local illu_poll_thread = task.spawn(function()
+                            while Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value
+                                and shared and not shared.is_unloading do
+                                task.wait(1)
+                                for _, other_player in next, plrs:GetPlayers() do
+                                    if other_player ~= plr and has_observe(other_player) then
+                                        library:Notify("Illusionist detected (poll)! Serverhopping.")
+                                        TrinketBotServerhop(string.format("Illusionist detected (poll); %s has Observe - Serverhopping", other_player.Name))
+                                        return
+                                    end
                                 end
                             end
-                        end
-                    end)
-                    table.insert(illu_connections, { Disconnect = function() task.cancel(illu_poll_thread) end })
+                        end)
+                        table.insert(illu_connections, { Disconnect = function() task.cancel(illu_poll_thread) end })
+                    end)()
                 end
 
                 proximity_warnings = {}
@@ -26315,7 +26321,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 326 loaded - Added Observe to Emergency Serverhop Conditions (equip-triggered, more reliable than the dedicated Illusionist watchers alone)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 327 loaded - Fixed another compile failure: illu_poll_thread was a new named local in ExecutePath's own near-limit scope, now IIFE-wrapped", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
