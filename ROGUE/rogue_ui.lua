@@ -14151,7 +14151,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             local usedTools = {}
 
             function ExecutePath(test_mode)
+                print("[ILLUSDEBUG2] ExecutePath ENTERED, test_mode=" .. tostring(test_mode))
                 if not cheat_client or not cheat_client.config then
+                    print("[ILLUSDEBUG2] ExecutePath bailing early: no cheat_client/config")
                     return
                 end
 
@@ -14400,6 +14402,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             task.wait(0.5)
                             plr:Kick("Humanoid not found - cannot set up death protection")
                         end
+                        print("[ILLUSDEBUG2] ExecutePath returning early: no Humanoid")
                         return
                     end
                 else
@@ -14410,19 +14413,25 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         task.wait(0.5)
                         plr:Kick("Character not found - cannot set up death protection")
                     end
+                    print("[ILLUSDEBUG2] ExecutePath returning early: no Character")
                     return
                 end
 
+                print("[ILLUSDEBUG2] ExecutePath past Character/Humanoid check, checking moderators")
                 for _, other_player in next, plrs:GetPlayers() do
                     if other_player ~= plr and is_moderator(other_player) then
+                        print("[ILLUSDEBUG2] ExecutePath returning early: moderator " .. other_player.Name .. " detected")
                         handle_moderator_detection(other_player)
                         return
                     end
                 end
 
+                print(string.format("[ILLUSDEBUG2] ExecutePath early SkipIllusionist check: toggle=%s",
+                    tostring(Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value)))
                 if Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value then
                     for _, other_player in next, plrs:GetPlayers() do
                         if other_player ~= plr and has_observe(other_player) then
+                            print("[ILLUSDEBUG2] early check found " .. other_player.Name .. " - hopping")
                             library:Notify("Illusionist detected! Serverhopping.")
                             TrinketBotServerhop(string.format("Illusionist in server; %s - Serverhopping", other_player.Name))
                             return
@@ -26381,7 +26390,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 333 loaded - Added [ILLUSDEBUG2] diagnostics to Trinket Bot's Skip Illusionist setup + poll loop to find why it's still not hopping", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 334 loaded - Added full checkpoint tracing through ExecutePath to find exactly where Skip Illusionist detection stops firing", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
