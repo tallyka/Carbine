@@ -14533,7 +14533,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         end)
                         table.insert(illu_connections, char_added_conn)
                     end)
-                    table.insert(illu_connections, player_added_conn)
+                    table.insert(illu_connections, player_added_conn);
 
                     -- Periodic fallback poll: PlayerAdded/CharacterAdded/Backpack.ChildAdded
                     -- only catch a NEW join, a respawn, or a NEW item appearing in the bag -
@@ -14547,7 +14547,11 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     -- function, not added as a new named local to ExecutePath's own
                     -- scope (which compile-failed once already this session from adding
                     -- new top-level locals to an already-near-the-limit closure).
-                    (function()
+                    -- Leading ';' required: without it, Lua parses the previous
+                    -- table.insert(...) call and this (function()...end)() as ONE
+                    -- continuous call chain (table.insert(...)(function()...end)()),
+                    -- which is exactly the "ambiguous syntax" error this hit.
+                    ;(function()
                         local illu_poll_thread = task.spawn(function()
                             while Toggles.SkipIllusionist and Toggles.SkipIllusionist.Value
                                 and shared and not shared.is_unloading do
@@ -26321,7 +26325,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 327 loaded - Fixed another compile failure: illu_poll_thread was a new named local in ExecutePath's own near-limit scope, now IIFE-wrapped", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 328 loaded - Fixed ambiguous syntax error from the IIFE wrap (leading semicolon before the bare '(function()')", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
