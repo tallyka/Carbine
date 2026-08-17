@@ -3190,22 +3190,20 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
     
     local repo = "https://raw.githubusercontent.com/tallyka/Carbine/refs/heads/main/"
 
-    -- Local-first: if HYDROXIDE/DEPENDENCIES/<file> exists on disk, read and
-    -- compile that instead of fetching from GitHub - keeps this working even
-    -- while raw.githubusercontent.com is rate-limited (429), and is just
-    -- faster in general when the files are already there. Falls back to the
-    -- normal HttpGet fetch if the local file isn't present, so this stays
-    -- safe for anyone who hasn't saved local copies.
-    local function fetch_dependency(filename)
-        if isfile and readfile and isfile("HYDROXIDE/DEPENDENCIES/" .. filename) then
-            local ok, src = pcall(readfile, "HYDROXIDE/DEPENDENCIES/" .. filename)
-            if ok and src then return src end
-        end
-        return game:HttpGet(repo .. "DEPENDENCIES/" .. filename, true)
-    end
-
+    -- Local-first (no shared named helper - a "local function fetch_dependency"
+    -- here turned out to add a named local to this file's shared outer scope,
+    -- which was ALSO where run_stage lives 30,000 lines later and is already
+    -- at Luau's 200-local ceiling - inlined as an IIFE per call site instead,
+    -- since that's a genuine nested function scope and adds no named local at
+    -- all here, only its own internal ok/src which don't escape it).
     local success, library_func = pcall(function()
-        return loadstring(fetch_dependency("Library.lua"))()
+        return loadstring((function()
+            if isfile and readfile and isfile("HYDROXIDE/DEPENDENCIES/Library.lua") then
+                local ok, src = pcall(readfile, "HYDROXIDE/DEPENDENCIES/Library.lua")
+                if ok and src then return src end
+            end
+            return game:HttpGet(repo .. "DEPENDENCIES/Library.lua", true)
+        end)())()
     end)
 
     if success then
@@ -3216,8 +3214,20 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
         getgenv().Options = library.Options or {}
         getgenv().Labels = library.Labels or {}
 
-        local SaveManager = loadstring(fetch_dependency("SaveManager.lua"))()
-        local ThemeManager = loadstring(fetch_dependency("ThemeManager.lua"))()
+        local SaveManager = loadstring((function()
+            if isfile and readfile and isfile("HYDROXIDE/DEPENDENCIES/SaveManager.lua") then
+                local ok, src = pcall(readfile, "HYDROXIDE/DEPENDENCIES/SaveManager.lua")
+                if ok and src then return src end
+            end
+            return game:HttpGet(repo .. "DEPENDENCIES/SaveManager.lua", true)
+        end)())()
+        local ThemeManager = loadstring((function()
+            if isfile and readfile and isfile("HYDROXIDE/DEPENDENCIES/ThemeManager.lua") then
+                local ok, src = pcall(readfile, "HYDROXIDE/DEPENDENCIES/ThemeManager.lua")
+                if ok and src then return src end
+            end
+            return game:HttpGet(repo .. "DEPENDENCIES/ThemeManager.lua", true)
+        end)())()
 
         SaveManager:SetLibrary(library)
         ThemeManager:SetLibrary(library)
@@ -26352,7 +26362,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 330 loaded - Library/SaveManager/ThemeManager/Chatlogger now read from HYDROXIDE/DEPENDENCIES/ locally first, falling back to GitHub only if not found", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 331 loaded - Removed the fetch_dependency named local (it was in the same shared scope as run_stage), inlined as per-call IIFEs instead", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
