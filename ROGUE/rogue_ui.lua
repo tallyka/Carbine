@@ -16464,6 +16464,20 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                 end
                             else
                                 library:Notify(string.format("Moving to point %d/%d", i, #trinket_bot.path_points))
+                                -- Short hops between close-together points can clip the
+                                -- character back toward the PREVIOUS point instead of
+                                -- landing cleanly - the tween's own duration (distance/speed)
+                                -- is so short for a nearby point that CanCollide gets
+                                -- re-enabled again almost immediately after being disabled,
+                                -- with no time for the character to actually settle at the
+                                -- new position first. A brief wait before short hops only
+                                -- (long ones already take long enough naturally) fixes it.
+                                if plr.Character and FindFirstChild(plr.Character, "HumanoidRootPart") then
+                                    local hop_distance = (target_point.position - plr.Character.HumanoidRootPart.Position).Magnitude
+                                    if hop_distance < 50 then
+                                        task.wait(1)
+                                    end
+                                end
                                 SmoothTeleport(target_point.position)
                             end
                         end
@@ -26431,7 +26445,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 338 loaded - Reverted hardcoded Observe; Emergency Serverhop Conditions now self-persists via mem so it survives every reload without manual config saves", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 339 loaded - Trinket Bot waits 1s before short-distance hops (<50 studs) to stop clipping back toward the previous point", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
