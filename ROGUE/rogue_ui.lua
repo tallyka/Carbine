@@ -12975,8 +12975,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 return summary
             end
 
-            local function SmoothTeleport(target, is_trinket_teleport)
+            local function SmoothTeleport(target, is_trinket_teleport, skip_settle)
                 is_trinket_teleport = is_trinket_teleport or false
+                skip_settle = skip_settle or false
 
                 if not plr.Character or not FindFirstChild(plr.Character, "HumanoidRootPart") then
                     return
@@ -13067,27 +13068,30 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     tween:Cancel()
                 end
 
-                -- Settle wait before re-enabling CanCollide below, for EVERY teleport,
-                -- not just trinket ones. The tween sets CFrame client-side every frame
-                -- with collision off; the instant collision comes back on, the physics
-                -- engine resolves against wherever the SERVER currently thinks this
-                -- character is - if the new position hasn't finished replicating yet,
-                -- that's the previous point, and the character gets snapped/clipped
-                -- straight back toward it. This is what was causing the "clips back to
-                -- the previous place" bug regardless of hop distance/speed.
+                -- Settle wait before re-enabling CanCollide below. The tween sets CFrame
+                -- client-side every frame with collision off; the instant collision
+                -- comes back on, the physics engine resolves against wherever the
+                -- SERVER currently thinks this character is - if the new position
+                -- hasn't finished replicating yet, that's the previous point, and the
+                -- character gets snapped/clipped straight back toward it. Skipped for
+                -- points that are meant to be instant (no configured wait_time) so
+                -- pure pass-through waypoints stay fast - the caller passes
+                -- skip_settle=true for those.
                 --
                 -- Anchored during this wait: CanCollide off does NOT stop gravity, so
                 -- without this the character would start falling (nothing to land on)
                 -- for the whole second before landing here. Anchoring holds it exactly
                 -- at the tween's endpoint until collision is restored below.
-                if root then
-                    pcall(function() root.Anchored = true end)
-                end
-                if not shared.is_unloading then
-                    task.wait(1)
-                end
-                if root then
-                    pcall(function() root.Anchored = false end)
+                if not skip_settle then
+                    if root then
+                        pcall(function() root.Anchored = true end)
+                    end
+                    if not shared.is_unloading then
+                        task.wait(1)
+                    end
+                    if root then
+                        pcall(function() root.Anchored = false end)
+                    end
                 end
 
                 if character then
@@ -16483,7 +16487,11 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                 end
                             else
                                 library:Notify(string.format("Moving to point %d/%d", i, #trinket_bot.path_points))
-                                SmoothTeleport(target_point.position)
+                                -- Instant points (no configured wait_time) skip the extra
+                                -- clip-fix settle delay - only points that actually pause
+                                -- here anyway (attacking, an NPC, etc.) get the safety wait.
+                                local is_instant_point = not target_point.wait_time or target_point.wait_time <= 0
+                                SmoothTeleport(target_point.position, false, is_instant_point)
                             end
                         end
                     end
@@ -26450,7 +26458,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 341 loaded - SmoothTeleport now anchors the character during the 1s settle wait so it doesn't fall through the map before landing", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 342 loaded - Instant points (no wait_time) skip the 1s settle delay, CanCollide restore is still unconditional so no fall-through risk", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
