@@ -12975,9 +12975,15 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 return summary
             end
 
-            local function SmoothTeleport(target, is_trinket_teleport, skip_settle)
+            local function SmoothTeleport(target, is_trinket_teleport, quick_settle)
                 is_trinket_teleport = is_trinket_teleport or false
-                skip_settle = skip_settle or false
+                -- Full 1s settle by default (gives the new position time to replicate
+                -- server-side before collision comes back on, preventing the clip-back-
+                -- to-previous-point bug). quick_settle=true still runs the SAME fix
+                -- (clipping happens on instant points too, skipping it entirely wasn't
+                -- right) but with a much shorter pause so instant/pass-through points
+                -- don't visibly stop and sit there like a real wait_time point does.
+                local settle_time = quick_settle and 0.2 or 1
 
                 if not plr.Character or not FindFirstChild(plr.Character, "HumanoidRootPart") then
                     return
@@ -13073,25 +13079,23 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 -- comes back on, the physics engine resolves against wherever the
                 -- SERVER currently thinks this character is - if the new position
                 -- hasn't finished replicating yet, that's the previous point, and the
-                -- character gets snapped/clipped straight back toward it. Skipped for
-                -- points that are meant to be instant (no configured wait_time) so
-                -- pure pass-through waypoints stay fast - the caller passes
-                -- skip_settle=true for those.
+                -- character gets snapped/clipped straight back toward it. This still
+                -- happens on instant/pass-through points too, so it always runs - just
+                -- for a much shorter settle_time there (quick_settle) so it doesn't look
+                -- like the bot stopped and sat at a point that isn't meant to pause.
                 --
                 -- Anchored during this wait: CanCollide off does NOT stop gravity, so
                 -- without this the character would start falling (nothing to land on)
-                -- for the whole second before landing here. Anchoring holds it exactly
-                -- at the tween's endpoint until collision is restored below.
-                if not skip_settle then
-                    if root then
-                        pcall(function() root.Anchored = true end)
-                    end
-                    if not shared.is_unloading then
-                        task.wait(1)
-                    end
-                    if root then
-                        pcall(function() root.Anchored = false end)
-                    end
+                -- for the whole settle_time before landing here. Anchoring holds it
+                -- exactly at the tween's endpoint until collision is restored below.
+                if root then
+                    pcall(function() root.Anchored = true end)
+                end
+                if not shared.is_unloading then
+                    task.wait(settle_time)
+                end
+                if root then
+                    pcall(function() root.Anchored = false end)
                 end
 
                 if character then
@@ -26458,7 +26462,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 342 loaded - Instant points (no wait_time) skip the 1s settle delay, CanCollide restore is still unconditional so no fall-through risk", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 343 loaded - Instant points now get a quick 0.2s settle instead of skipping it entirely, still fixes clipping without visibly stopping", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
