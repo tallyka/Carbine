@@ -13075,8 +13075,19 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 -- that's the previous point, and the character gets snapped/clipped
                 -- straight back toward it. This is what was causing the "clips back to
                 -- the previous place" bug regardless of hop distance/speed.
+                --
+                -- Anchored during this wait: CanCollide off does NOT stop gravity, so
+                -- without this the character would start falling (nothing to land on)
+                -- for the whole second before landing here. Anchoring holds it exactly
+                -- at the tween's endpoint until collision is restored below.
+                if root then
+                    pcall(function() root.Anchored = true end)
+                end
                 if not shared.is_unloading then
                     task.wait(1)
+                end
+                if root then
+                    pcall(function() root.Anchored = false end)
                 end
 
                 if character then
@@ -26439,7 +26450,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 340 loaded - SmoothTeleport now waits 1s before re-enabling CanCollide on EVERY teleport, fixing the clip-back-to-previous-point bug at its actual source", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 341 loaded - SmoothTeleport now anchors the character during the 1s settle wait so it doesn't fall through the map before landing", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
