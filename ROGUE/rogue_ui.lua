@@ -26462,7 +26462,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 343 loaded - Instant points now get a quick 0.2s settle instead of skipping it entirely, still fixes clipping without visibly stopping", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 344 loaded - Loop Orderly no longer waits for Immortal to clear before the next rep", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32341,11 +32341,6 @@ end
                                             repeat task.wait(0.5)
                                             until FindFirstChild(plr.Character, "Immortal") or (os.clock() - immortal_t0) > 20
                                             print(string.format("[ORDERLY] immortal appeared=%s (%.1fs)", tostring(FindFirstChild(plr.Character, "Immortal") ~= nil), os.clock() - immortal_t0))
-
-                                            local clear_t0 = os.clock()
-                                            repeat task.wait(0.5)
-                                            until not FindFirstChild(plr.Character, "Immortal") or (os.clock() - clear_t0) > 30
-                                            print(string.format("[ORDERLY] immortal cleared (%.1fs)", os.clock() - clear_t0))
 
                                             task.wait(0.5) -- small settle buffer for backpack/character to finish populating
 
