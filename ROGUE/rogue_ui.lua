@@ -12563,6 +12563,106 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
         pcall(function()
             local group_morph = Tabs.Misc:AddRightGroupbox("Character Morph")
 
+            -- ApplyDescription()/GetHumanoidDescriptionFrom* are blocked in this game
+            -- ("can only be called by the backend server", confirmed live) - so instead
+            -- of the HumanoidDescription pipeline, this loads each catalog asset
+            -- directly (game:GetObjects) and parents the resulting CharacterMesh
+            -- (pre-HumanoidDescription R6 body part swapping) / Accessory onto our own
+            -- Humanoid/Character. Plain client-side Instance edits, no RemoteEvent
+            -- involved anywhere, so this can never replicate outward to other clients -
+            -- it only ever renders on our own screen.
+            local BODYPART_ASSETTYPE_TO_ENUM = {
+                [17] = Enum.BodyPart.Head, [27] = Enum.BodyPart.Torso,
+                [28] = Enum.BodyPart.RightArm, [29] = Enum.BodyPart.LeftArm,
+                [30] = Enum.BodyPart.LeftLeg, [31] = Enum.BodyPart.RightLeg,
+            }
+
+            local morph_state = { meshes = {}, accessories = {}, original_colors = nil }
+
+            local function find_of_class(objs, classNames)
+                for _, obj in ipairs(objs) do
+                    for _, cn in ipairs(classNames) do
+                        if obj:IsA(cn) then return obj end
+                    end
+                    local ok, descendants = pcall(function() return obj:GetDescendants() end)
+                    if ok then
+                        for _, d in ipairs(descendants) do
+                            for _, cn in ipairs(classNames) do
+                                if d:IsA(cn) then return d end
+                            end
+                        end
+                    end
+                end
+                return nil
+            end
+
+            local function apply_morph_items(hum, char, items, label)
+                local applied = 0
+                for _, item in ipairs(items) do
+                    local bp = BODYPART_ASSETTYPE_TO_ENUM[item.assetType]
+                    if bp then
+                        local ok, objs = pcall(function() return game:GetObjects("rbxassetid://" .. item.id) end)
+                        if ok and objs and #objs > 0 then
+                            local mesh = find_of_class(objs, {"CharacterMesh"})
+                            if mesh then
+                                if morph_state.meshes[bp] then
+                                    pcall(function() morph_state.meshes[bp]:Destroy() end)
+                                    morph_state.meshes[bp] = nil
+                                end
+                                local existing = {}
+                                for _, e in ipairs(hum:GetChildren()) do
+                                    if e:IsA("CharacterMesh") and e.BodyPart == bp then
+                                        table.insert(existing, e)
+                                    end
+                                end
+                                for _, e in ipairs(existing) do pcall(function() e:Destroy() end) end
+
+                                local clone = mesh:Clone()
+                                clone.Parent = hum
+                                morph_state.meshes[bp] = clone
+                                applied = applied + 1
+                                print(string.format("[MORPH] %s body part %s <- asset %d", label, bp.Name, item.id))
+                            else
+                                print(string.format("[MORPH] %s asset %d (body part) had no CharacterMesh", label, item.id))
+                            end
+                        else
+                            print(string.format("[MORPH] %s failed to load asset %d: %s", label, item.id, tostring(objs)))
+                        end
+                    elseif item.assetType == 8 then
+                        local ok, objs = pcall(function() return game:GetObjects("rbxassetid://" .. item.id) end)
+                        if ok and objs and #objs > 0 then
+                            local accessory = find_of_class(objs, {"Accessory", "Hat"})
+                            if accessory then
+                                local clone = accessory:Clone()
+                                clone.Parent = char
+                                table.insert(morph_state.accessories, clone)
+                                applied = applied + 1
+                                print(string.format("[MORPH] %s hat <- asset %d", label, item.id))
+                            else
+                                print(string.format("[MORPH] %s asset %d (hat) had no Accessory/Hat", label, item.id))
+                            end
+                        else
+                            print(string.format("[MORPH] %s failed to load hat asset %d: %s", label, item.id, tostring(objs)))
+                        end
+                    else
+                        print(string.format("[MORPH] %s assetType %s not supported on R6, skipped (asset %d)", label, tostring(item.assetType), item.id))
+                    end
+                end
+                return applied
+            end
+
+            local function snapshot_body_colors(char)
+                if morph_state.original_colors then return end
+                local bc = FindFirstChildOfClass(char, "BodyColors")
+                if bc then
+                    morph_state.original_colors = {
+                        HeadColor = bc.HeadColor, TorsoColor = bc.TorsoColor,
+                        LeftArmColor = bc.LeftArmColor, RightArmColor = bc.RightArmColor,
+                        LeftLegColor = bc.LeftLegColor, RightLegColor = bc.RightLegColor,
+                    }
+                end
+            end
+
             group_morph:AddInput("MorphTarget", {
                 Text = "Username or UserId",
                 Placeholder = "e.g. Builderman or 156",
@@ -12593,14 +12693,6 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             return
                         end
 
-                        local ok2, desc = pcall(function()
-                            return Players:GetHumanoidDescriptionFromUserId(userId)
-                        end)
-                        if not ok2 or not desc then
-                            library:Notify("Morph: couldn't fetch that avatar", 4)
-                            return
-                        end
-
                         local char = plr.Character
                         local hum = char and FindFirstChildOfClass(char, "Humanoid")
                         if not hum then
@@ -12608,38 +12700,52 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             return
                         end
 
-                        local ok3 = pcall(function() hum:ApplyDescription(desc) end)
-                        if ok3 then
-                            library:Notify("Morph: applied appearance of " .. target, 4)
+                        local ok2, body = pcall(function()
+                            return game:HttpGet("https://avatar.roblox.com/v1/users/" .. userId .. "/avatar")
+                        end)
+                        if not ok2 or not body then
+                            library:Notify("Morph: couldn't fetch that avatar", 4)
+                            return
+                        end
+
+                        local ok3, data = pcall(function()
+                            return Services.HttpService:JSONDecode(body)
+                        end)
+                        if not ok3 or not data or type(data.assets) ~= "table" then
+                            library:Notify("Morph: bad avatar data", 4)
+                            return
+                        end
+
+                        local items = {}
+                        for _, a in ipairs(data.assets) do
+                            local at = type(a.assetType) == "table" and a.assetType.id or a.assetType
+                            table.insert(items, { id = a.id, assetType = at, name = a.name })
+                        end
+
+                        snapshot_body_colors(char)
+                        local bc = FindFirstChildOfClass(char, "BodyColors")
+                        if bc and data.bodyColors then
+                            pcall(function()
+                                if data.bodyColors.headColorId then bc.HeadColor = BrickColor.new(data.bodyColors.headColorId) end
+                                if data.bodyColors.torsoColorId then bc.TorsoColor = BrickColor.new(data.bodyColors.torsoColorId) end
+                                if data.bodyColors.leftArmColorId then bc.LeftArmColor = BrickColor.new(data.bodyColors.leftArmColorId) end
+                                if data.bodyColors.rightArmColorId then bc.RightArmColor = BrickColor.new(data.bodyColors.rightArmColorId) end
+                                if data.bodyColors.leftLegColorId then bc.LeftLegColor = BrickColor.new(data.bodyColors.leftLegColorId) end
+                                if data.bodyColors.rightLegColorId then bc.RightLegColor = BrickColor.new(data.bodyColors.rightLegColorId) end
+                            end)
+                        end
+
+                        local applied = apply_morph_items(hum, char, items, "user:" .. target)
+                        if applied > 0 then
+                            library:Notify(string.format("Morph: applied %d parts from %s (visual only, local)", applied, target), 4)
                         else
-                            library:Notify("Morph: failed to apply appearance", 4)
+                            library:Notify("Morph: nothing applicable found on that avatar", 4)
                         end
                     end)
                 end
             })
 
             group_morph:AddDivider()
-
-            -- Maps Roblox's catalog AssetType id -> the matching HumanoidDescription
-            -- field, so a Bundle ID can be turned into an actual applied appearance
-            -- (a Bundle is just a set of individual catalog assets, not something
-            -- ApplyDescription/GetHumanoidDescriptionFrom* accepts directly).
-            local MORPH_SINGULAR_FIELD = {
-                [17] = "Head", [79] = "Head", [18] = "Face",
-                [11] = "Shirt", [12] = "Pants", [2] = "GraphicTShirt",
-                [27] = "Torso", [28] = "RightArm", [29] = "LeftArm", [30] = "LeftLeg", [31] = "RightLeg",
-                [48] = "ClimbAnimation", [50] = "FallAnimation", [51] = "IdleAnimation",
-                [52] = "JumpAnimation", [53] = "RunAnimation", [54] = "SwimAnimation", [55] = "WalkAnimation",
-            }
-            local MORPH_LIST_FIELD = {
-                [8] = "HatAccessory", [41] = "HairAccessory", [42] = "FaceAccessory",
-                [43] = "NeckAccessory", [44] = "ShouldersAccessory", [45] = "FrontAccessory",
-                [46] = "BackAccessory", [47] = "WaistAccessory", [57] = "EarAccessory",
-                [58] = "EyeAccessory", [64] = "TShirtAccessory", [65] = "ShirtAccessory",
-                [66] = "PantsAccessory", [67] = "JacketAccessory", [68] = "SweaterAccessory",
-                [69] = "ShortsAccessory", [70] = "LeftShoeAccessory", [71] = "RightShoeAccessory",
-                [72] = "DressSkirtAccessory", [76] = "EyebrowAccessory", [77] = "EyelashAccessory",
-            }
 
             group_morph:AddInput("MorphBundleId", {
                 Text = "Bundle ID",
@@ -12653,7 +12759,6 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Func = function()
                     task.spawn(function()
                         local bundleId = tonumber(Options.MorphBundleId and Options.MorphBundleId.Value)
-                        print(string.format("[MORPH] start, bundleId=%s", tostring(bundleId)))
                         if not bundleId then
                             library:Notify("Morph: enter a valid numeric Bundle ID first", 4)
                             return
@@ -12661,7 +12766,6 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                         local char = plr.Character
                         local hum = char and FindFirstChildOfClass(char, "Humanoid")
-                        print(string.format("[MORPH] char=%s hum=%s", tostring(char ~= nil), tostring(hum ~= nil)))
                         if not hum then
                             library:Notify("Morph: no character/humanoid found", 4)
                             return
@@ -12670,9 +12774,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         local ok, body = pcall(function()
                             return game:HttpGet("https://catalog.roblox.com/v1/bundles/" .. bundleId .. "/details")
                         end)
-                        print(string.format("[MORPH] http ok=%s len=%s", tostring(ok), tostring(body and #body)))
                         if not ok or not body then
-                            print("[MORPH] http error: " .. tostring(body))
                             library:Notify("Morph: couldn't fetch that bundle", 4)
                             return
                         end
@@ -12680,52 +12782,24 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         local ok2, data = pcall(function()
                             return Services.HttpService:JSONDecode(body)
                         end)
-                        print(string.format("[MORPH] json ok=%s items=%s", tostring(ok2), tostring(data and data.items and #data.items)))
                         if not ok2 or not data or type(data.items) ~= "table" then
-                            print("[MORPH] json/body was: " .. tostring(body):sub(1, 300))
                             library:Notify("Morph: bad bundle data", 4)
                             return
                         end
 
-                        local list_values = {}
-                        local desc = Instance.new("HumanoidDescription")
-                        local applied_any = false
-                        for _, item in ipairs(data.items) do
-                            if item.type == "Asset" and item.assetType then
-                                local singular = MORPH_SINGULAR_FIELD[item.assetType]
-                                local list_field = MORPH_LIST_FIELD[item.assetType]
-                                if singular then
-                                    local setok, seterr = pcall(function() desc[singular] = item.id end)
-                                    print(string.format("[MORPH] item %s (assetType=%d) -> %s = %d, setok=%s %s",
-                                        tostring(item.name), item.assetType, singular, item.id, tostring(setok), setok and "" or tostring(seterr)))
-                                    applied_any = true
-                                elseif list_field then
-                                    list_values[list_field] = list_values[list_field] or {}
-                                    table.insert(list_values[list_field], tostring(item.id))
-                                    print(string.format("[MORPH] item %s (assetType=%d) -> %s += %d",
-                                        tostring(item.name), item.assetType, list_field, item.id))
-                                    applied_any = true
-                                else
-                                    print(string.format("[MORPH] item %s (assetType=%d) -> unmapped, skipped", tostring(item.name), item.assetType))
-                                end
+                        local items = {}
+                        for _, it in ipairs(data.items) do
+                            if it.type == "Asset" and it.assetType then
+                                table.insert(items, { id = it.id, assetType = it.assetType, name = it.name })
                             end
                         end
-                        for field, ids in pairs(list_values) do
-                            local setok, seterr = pcall(function() desc[field] = table.concat(ids, ",") end)
-                            print(string.format("[MORPH] list field %s = %s, setok=%s %s", field, table.concat(ids, ","), tostring(setok), setok and "" or tostring(seterr)))
-                        end
 
-                        if not applied_any then
-                            library:Notify("Morph: bundle had nothing applicable", 4)
-                            return
-                        end
-
-                        local ok3, err3 = pcall(function() hum:ApplyDescription(desc) end)
-                        print(string.format("[MORPH] ApplyDescription ok=%s %s", tostring(ok3), ok3 and "" or tostring(err3)))
-                        if ok3 then
-                            library:Notify("Morph: applied bundle " .. tostring(data.name or bundleId), 4)
+                        snapshot_body_colors(char)
+                        local applied = apply_morph_items(hum, char, items, "bundle:" .. tostring(data.name))
+                        if applied > 0 then
+                            library:Notify(string.format("Morph: applied %d parts from %s (visual only, local)", applied, tostring(data.name or bundleId)), 4)
                         else
-                            library:Notify("Morph: failed to apply bundle appearance", 4)
+                            library:Notify("Morph: nothing applicable in that bundle for this rig", 4)
                         end
                     end)
                 end
@@ -12735,20 +12809,35 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Text = "Reset My Own Appearance",
                 Func = function()
                     task.spawn(function()
-                        local Players = game:GetService("Players")
                         local char = plr.Character
-                        local hum = char and FindFirstChildOfClass(char, "Humanoid")
-                        if not hum then return end
+                        if not char then return end
 
-                        local ok, desc = pcall(function()
-                            return Players:GetHumanoidDescriptionFromUserId(plr.UserId)
-                        end)
-                        if ok and desc then
-                            pcall(function() hum:ApplyDescription(desc) end)
-                            library:Notify("Morph: reset to your own avatar", 4)
-                        else
-                            library:Notify("Morph: couldn't fetch your own avatar", 4)
+                        for _, mesh in pairs(morph_state.meshes) do
+                            pcall(function() mesh:Destroy() end)
                         end
+                        morph_state.meshes = {}
+
+                        for _, acc in ipairs(morph_state.accessories) do
+                            pcall(function() acc:Destroy() end)
+                        end
+                        morph_state.accessories = {}
+
+                        if morph_state.original_colors then
+                            local bc = FindFirstChildOfClass(char, "BodyColors")
+                            if bc then
+                                pcall(function()
+                                    bc.HeadColor = morph_state.original_colors.HeadColor
+                                    bc.TorsoColor = morph_state.original_colors.TorsoColor
+                                    bc.LeftArmColor = morph_state.original_colors.LeftArmColor
+                                    bc.RightArmColor = morph_state.original_colors.RightArmColor
+                                    bc.LeftLegColor = morph_state.original_colors.LeftLegColor
+                                    bc.RightLegColor = morph_state.original_colors.RightLegColor
+                                end)
+                            end
+                            morph_state.original_colors = nil
+                        end
+
+                        library:Notify("Morph: reset to your own appearance", 4)
                     end)
                 end
             })
@@ -26659,7 +26748,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 347 loaded - Bundle Morph now prints [MORPH] debug info to console", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 348 loaded - Character Morph rebuilt: R6 CharacterMesh/Accessory swap instead of blocked ApplyDescription, visual-only/local", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
