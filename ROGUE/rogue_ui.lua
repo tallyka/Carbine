@@ -12618,6 +12618,105 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 end
             })
 
+            group_morph:AddDivider()
+
+            -- Maps Roblox's catalog AssetType id -> the matching HumanoidDescription
+            -- field, so a Bundle ID can be turned into an actual applied appearance
+            -- (a Bundle is just a set of individual catalog assets, not something
+            -- ApplyDescription/GetHumanoidDescriptionFrom* accepts directly).
+            local MORPH_SINGULAR_FIELD = {
+                [17] = "Head", [79] = "Head", [18] = "Face",
+                [11] = "Shirt", [12] = "Pants", [2] = "GraphicTShirt",
+                [27] = "Torso", [28] = "RightArm", [29] = "LeftArm", [30] = "LeftLeg", [31] = "RightLeg",
+                [48] = "ClimbAnimation", [50] = "FallAnimation", [51] = "IdleAnimation",
+                [52] = "JumpAnimation", [53] = "RunAnimation", [54] = "SwimAnimation", [55] = "WalkAnimation",
+            }
+            local MORPH_LIST_FIELD = {
+                [8] = "HatAccessory", [41] = "HairAccessory", [42] = "FaceAccessory",
+                [43] = "NeckAccessory", [44] = "ShouldersAccessory", [45] = "FrontAccessory",
+                [46] = "BackAccessory", [47] = "WaistAccessory", [57] = "EarAccessory",
+                [58] = "EyeAccessory", [64] = "TShirtAccessory", [65] = "ShirtAccessory",
+                [66] = "PantsAccessory", [67] = "JacketAccessory", [68] = "SweaterAccessory",
+                [69] = "ShortsAccessory", [70] = "LeftShoeAccessory", [71] = "RightShoeAccessory",
+                [72] = "DressSkirtAccessory", [76] = "EyebrowAccessory", [77] = "EyelashAccessory",
+            }
+
+            group_morph:AddInput("MorphBundleId", {
+                Text = "Bundle ID",
+                Placeholder = "e.g. 2796884228547",
+                ClearTextOnFocus = false,
+            })
+
+            group_morph:AddButton({
+                Text = "Apply Bundle Morph",
+                DoubleClick = true,
+                Func = function()
+                    task.spawn(function()
+                        local bundleId = tonumber(Options.MorphBundleId and Options.MorphBundleId.Value)
+                        if not bundleId then
+                            library:Notify("Morph: enter a valid numeric Bundle ID first", 4)
+                            return
+                        end
+
+                        local char = plr.Character
+                        local hum = char and FindFirstChildOfClass(char, "Humanoid")
+                        if not hum then
+                            library:Notify("Morph: no character/humanoid found", 4)
+                            return
+                        end
+
+                        local ok, body = pcall(function()
+                            return game:HttpGet("https://catalog.roblox.com/v1/bundles/" .. bundleId .. "/details")
+                        end)
+                        if not ok or not body then
+                            library:Notify("Morph: couldn't fetch that bundle", 4)
+                            return
+                        end
+
+                        local ok2, data = pcall(function()
+                            return Services.HttpService:JSONDecode(body)
+                        end)
+                        if not ok2 or not data or type(data.items) ~= "table" then
+                            library:Notify("Morph: bad bundle data", 4)
+                            return
+                        end
+
+                        local list_values = {}
+                        local desc = Instance.new("HumanoidDescription")
+                        local applied_any = false
+                        for _, item in ipairs(data.items) do
+                            if item.type == "Asset" and item.assetType then
+                                local singular = MORPH_SINGULAR_FIELD[item.assetType]
+                                local list_field = MORPH_LIST_FIELD[item.assetType]
+                                if singular then
+                                    pcall(function() desc[singular] = item.id end)
+                                    applied_any = true
+                                elseif list_field then
+                                    list_values[list_field] = list_values[list_field] or {}
+                                    table.insert(list_values[list_field], tostring(item.id))
+                                    applied_any = true
+                                end
+                            end
+                        end
+                        for field, ids in pairs(list_values) do
+                            pcall(function() desc[field] = table.concat(ids, ",") end)
+                        end
+
+                        if not applied_any then
+                            library:Notify("Morph: bundle had nothing applicable", 4)
+                            return
+                        end
+
+                        local ok3 = pcall(function() hum:ApplyDescription(desc) end)
+                        if ok3 then
+                            library:Notify("Morph: applied bundle " .. tostring(data.name or bundleId), 4)
+                        else
+                            library:Notify("Morph: failed to apply bundle appearance", 4)
+                        end
+                    end)
+                end
+            })
+
             group_morph:AddButton({
                 Text = "Reset My Own Appearance",
                 Func = function()
@@ -26546,7 +26645,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 345 loaded - Added Character Morph (Misc tab): apply any player's avatar to yourself, cosmetic only", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 346 loaded - Character Morph now also supports Bundle IDs (Misc tab)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
