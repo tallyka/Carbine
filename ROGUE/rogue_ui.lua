@@ -12653,6 +12653,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Func = function()
                     task.spawn(function()
                         local bundleId = tonumber(Options.MorphBundleId and Options.MorphBundleId.Value)
+                        print(string.format("[MORPH] start, bundleId=%s", tostring(bundleId)))
                         if not bundleId then
                             library:Notify("Morph: enter a valid numeric Bundle ID first", 4)
                             return
@@ -12660,6 +12661,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                         local char = plr.Character
                         local hum = char and FindFirstChildOfClass(char, "Humanoid")
+                        print(string.format("[MORPH] char=%s hum=%s", tostring(char ~= nil), tostring(hum ~= nil)))
                         if not hum then
                             library:Notify("Morph: no character/humanoid found", 4)
                             return
@@ -12668,7 +12670,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         local ok, body = pcall(function()
                             return game:HttpGet("https://catalog.roblox.com/v1/bundles/" .. bundleId .. "/details")
                         end)
+                        print(string.format("[MORPH] http ok=%s len=%s", tostring(ok), tostring(body and #body)))
                         if not ok or not body then
+                            print("[MORPH] http error: " .. tostring(body))
                             library:Notify("Morph: couldn't fetch that bundle", 4)
                             return
                         end
@@ -12676,7 +12680,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         local ok2, data = pcall(function()
                             return Services.HttpService:JSONDecode(body)
                         end)
+                        print(string.format("[MORPH] json ok=%s items=%s", tostring(ok2), tostring(data and data.items and #data.items)))
                         if not ok2 or not data or type(data.items) ~= "table" then
+                            print("[MORPH] json/body was: " .. tostring(body):sub(1, 300))
                             library:Notify("Morph: bad bundle data", 4)
                             return
                         end
@@ -12689,17 +12695,24 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                 local singular = MORPH_SINGULAR_FIELD[item.assetType]
                                 local list_field = MORPH_LIST_FIELD[item.assetType]
                                 if singular then
-                                    pcall(function() desc[singular] = item.id end)
+                                    local setok, seterr = pcall(function() desc[singular] = item.id end)
+                                    print(string.format("[MORPH] item %s (assetType=%d) -> %s = %d, setok=%s %s",
+                                        tostring(item.name), item.assetType, singular, item.id, tostring(setok), setok and "" or tostring(seterr)))
                                     applied_any = true
                                 elseif list_field then
                                     list_values[list_field] = list_values[list_field] or {}
                                     table.insert(list_values[list_field], tostring(item.id))
+                                    print(string.format("[MORPH] item %s (assetType=%d) -> %s += %d",
+                                        tostring(item.name), item.assetType, list_field, item.id))
                                     applied_any = true
+                                else
+                                    print(string.format("[MORPH] item %s (assetType=%d) -> unmapped, skipped", tostring(item.name), item.assetType))
                                 end
                             end
                         end
                         for field, ids in pairs(list_values) do
-                            pcall(function() desc[field] = table.concat(ids, ",") end)
+                            local setok, seterr = pcall(function() desc[field] = table.concat(ids, ",") end)
+                            print(string.format("[MORPH] list field %s = %s, setok=%s %s", field, table.concat(ids, ","), tostring(setok), setok and "" or tostring(seterr)))
                         end
 
                         if not applied_any then
@@ -12707,7 +12720,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             return
                         end
 
-                        local ok3 = pcall(function() hum:ApplyDescription(desc) end)
+                        local ok3, err3 = pcall(function() hum:ApplyDescription(desc) end)
+                        print(string.format("[MORPH] ApplyDescription ok=%s %s", tostring(ok3), ok3 and "" or tostring(err3)))
                         if ok3 then
                             library:Notify("Morph: applied bundle " .. tostring(data.name or bundleId), 4)
                         else
@@ -26645,7 +26659,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 346 loaded - Character Morph now also supports Bundle IDs (Misc tab)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 347 loaded - Bundle Morph now prints [MORPH] debug info to console", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
