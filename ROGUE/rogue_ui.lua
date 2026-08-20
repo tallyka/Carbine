@@ -12557,6 +12557,90 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             })
         end
 
+        -- Wrapped in a genuine nested function (not do...end) so its locals get
+        -- their own fresh register scope instead of adding to the outer closure's
+        -- 200-local cap (see BUILD 219/229-236's history above).
+        pcall(function()
+            local group_morph = Tabs.Misc:AddRightGroupbox("Character Morph")
+
+            group_morph:AddInput("MorphTarget", {
+                Text = "Username or UserId",
+                Placeholder = "e.g. Builderman or 156",
+                ClearTextOnFocus = false,
+            })
+
+            group_morph:AddButton({
+                Text = "Apply Morph",
+                DoubleClick = true,
+                Func = function()
+                    task.spawn(function()
+                        local target = Options.MorphTarget and Options.MorphTarget.Value
+                        if not target or target == "" then
+                            library:Notify("Morph: enter a username or UserId first", 4)
+                            return
+                        end
+
+                        local Players = game:GetService("Players")
+                        local userId = tonumber(target)
+                        if not userId then
+                            local ok, id = pcall(function()
+                                return Players:GetUserIdFromNameAsync(target)
+                            end)
+                            if ok then userId = id end
+                        end
+                        if not userId then
+                            library:Notify("Morph: couldn't resolve that username", 4)
+                            return
+                        end
+
+                        local ok2, desc = pcall(function()
+                            return Players:GetHumanoidDescriptionFromUserId(userId)
+                        end)
+                        if not ok2 or not desc then
+                            library:Notify("Morph: couldn't fetch that avatar", 4)
+                            return
+                        end
+
+                        local char = plr.Character
+                        local hum = char and FindFirstChildOfClass(char, "Humanoid")
+                        if not hum then
+                            library:Notify("Morph: no character/humanoid found", 4)
+                            return
+                        end
+
+                        local ok3 = pcall(function() hum:ApplyDescription(desc) end)
+                        if ok3 then
+                            library:Notify("Morph: applied appearance of " .. target, 4)
+                        else
+                            library:Notify("Morph: failed to apply appearance", 4)
+                        end
+                    end)
+                end
+            })
+
+            group_morph:AddButton({
+                Text = "Reset My Own Appearance",
+                Func = function()
+                    task.spawn(function()
+                        local Players = game:GetService("Players")
+                        local char = plr.Character
+                        local hum = char and FindFirstChildOfClass(char, "Humanoid")
+                        if not hum then return end
+
+                        local ok, desc = pcall(function()
+                            return Players:GetHumanoidDescriptionFromUserId(plr.UserId)
+                        end)
+                        if ok and desc then
+                            pcall(function() hum:ApplyDescription(desc) end)
+                            library:Notify("Morph: reset to your own avatar", 4)
+                        else
+                            library:Notify("Morph: couldn't fetch your own avatar", 4)
+                        end
+                    end)
+                end
+            })
+        end)
+
         local ExecutePath   -- assigned without "local" further down, zero behavior change to the Trinket Bot itself
         -- Forward-declaring alone didn't reach code far later in the file (proven live -
         -- calling it still hit a nil), so there must be an intervening scope boundary a
@@ -26462,7 +26546,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 344 loaded - Loop Orderly no longer waits for Immortal to clear before the next rep", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 345 loaded - Added Character Morph (Misc tab): apply any player's avatar to yourself, cosmetic only", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
