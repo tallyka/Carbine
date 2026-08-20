@@ -12566,18 +12566,26 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             -- ApplyDescription()/GetHumanoidDescriptionFrom* are blocked in this game
             -- ("can only be called by the backend server", confirmed live) - so instead
             -- of the HumanoidDescription pipeline, this loads each catalog asset
-            -- directly (game:GetObjects) and parents the resulting CharacterMesh
-            -- (pre-HumanoidDescription R6 body part swapping) / Accessory onto our own
-            -- Humanoid/Character. Plain client-side Instance edits, no RemoteEvent
-            -- involved anywhere, so this can never replicate outward to other clients -
-            -- it only ever renders on our own screen.
-            local BODYPART_ASSETTYPE_TO_ENUM = {
-                [17] = Enum.BodyPart.Head, [27] = Enum.BodyPart.Torso,
-                [28] = Enum.BodyPart.RightArm, [29] = Enum.BodyPart.LeftArm,
-                [30] = Enum.BodyPart.LeftLeg, [31] = Enum.BodyPart.RightLeg,
+            -- directly (game:GetObjects) and copies its mesh/texture straight onto our
+            -- OWN character's matching part's SpecialMesh (and Hats as real Accessory
+            -- instances). Plain client-side Instance edits, no RemoteEvent involved
+            -- anywhere, so this can never replicate outward to other clients - it only
+            -- ever renders on our own screen.
+            --
+            -- Modern bundle body-part assets (confirmed live) are MeshPart instances,
+            -- not the old CharacterMesh wrapper - so this pulls MeshId/texture out of
+            -- whatever shape the loaded asset actually has (MeshPart, SpecialMesh, or
+            -- legacy CharacterMesh) and writes it onto a SpecialMesh under our part.
+            -- Note MeshPart's texture property is "TextureID" (capital D) while
+            -- SpecialMesh's is "TextureId" - genuinely different Roblox API casing,
+            -- confirmed against the official class docs, not a typo.
+            local ASSETTYPE_TO_PARTNAME = {
+                [17] = "Head", [27] = "Torso",
+                [28] = "Right Arm", [29] = "Left Arm",
+                [30] = "Left Leg", [31] = "Right Leg",
             }
 
-            local morph_state = { meshes = {}, accessories = {}, original_colors = nil }
+            local morph_state = { part_snapshots = {}, accessories = {}, original_colors = nil }
 
             local function find_of_class(objs, classNames)
                 for _, obj in ipairs(objs) do
@@ -12596,34 +12604,75 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 return nil
             end
 
-            local function apply_morph_items(hum, char, items, label)
+            local function extract_mesh_and_texture(objs)
+                local meshPart = find_of_class(objs, {"MeshPart"})
+                if meshPart and tostring(meshPart.MeshId) ~= "" then
+                    local texId = ""
+                    pcall(function() texId = tostring(meshPart.TextureID) end)
+                    return tostring(meshPart.MeshId), texId
+                end
+                local specialMesh = find_of_class(objs, {"SpecialMesh", "FileMesh"})
+                if specialMesh and tostring(specialMesh.MeshId) ~= "" then
+                    return tostring(specialMesh.MeshId), tostring(specialMesh.TextureId)
+                end
+                local charMesh = find_of_class(objs, {"CharacterMesh"})
+                if charMesh and charMesh.MeshId and charMesh.MeshId ~= 0 then
+                    local texId = (charMesh.BaseTextureId and charMesh.BaseTextureId ~= 0)
+                        and ("rbxassetid://" .. tostring(charMesh.BaseTextureId)) or ""
+                    return "rbxassetid://" .. tostring(charMesh.MeshId), texId
+                end
+                return nil, nil
+            end
+
+            local function set_part_mesh(char, partName, meshId, textureId)
+                local part = char:FindFirstChild(partName)
+                if not (part and part:IsA("BasePart")) then return false end
+
+                local sm = part:FindFirstChildOfClass("SpecialMesh")
+                local created = false
+                if not sm then
+                    sm = Instance.new("SpecialMesh")
+                    sm.Parent = part
+                    created = true
+                end
+
+                if not morph_state.part_snapshots[part] then
+                    morph_state.part_snapshots[part] = {
+                        created = created,
+                        meshId = created and "" or sm.MeshId,
+                        textureId = created and "" or sm.TextureId,
+                        meshType = created and Enum.MeshType.FileMesh or sm.MeshType,
+                    }
+                end
+
+                local setok, seterr = pcall(function()
+                    sm.MeshType = Enum.MeshType.FileMesh
+                    sm.MeshId = meshId
+                    if textureId and textureId ~= "" then
+                        sm.TextureId = textureId
+                    end
+                end)
+                return setok, seterr
+            end
+
+            local function apply_morph_items(char, items, label)
                 local applied = 0
                 for _, item in ipairs(items) do
-                    local bp = BODYPART_ASSETTYPE_TO_ENUM[item.assetType]
-                    if bp then
+                    local partName = ASSETTYPE_TO_PARTNAME[item.assetType]
+                    if partName then
                         local ok, objs = pcall(function() return game:GetObjects("rbxassetid://" .. item.id) end)
                         if ok and objs and #objs > 0 then
-                            local mesh = find_of_class(objs, {"CharacterMesh"})
-                            if mesh then
-                                if morph_state.meshes[bp] then
-                                    pcall(function() morph_state.meshes[bp]:Destroy() end)
-                                    morph_state.meshes[bp] = nil
+                            local meshId, texId = extract_mesh_and_texture(objs)
+                            if meshId then
+                                local setok, seterr = set_part_mesh(char, partName, meshId, texId)
+                                if setok then
+                                    applied = applied + 1
+                                    print(string.format("[MORPH] %s %s <- asset %d (mesh %s)", label, partName, item.id, meshId))
+                                else
+                                    print(string.format("[MORPH] %s %s: failed to set mesh: %s", label, partName, tostring(seterr)))
                                 end
-                                local existing = {}
-                                for _, e in ipairs(hum:GetChildren()) do
-                                    if e:IsA("CharacterMesh") and e.BodyPart == bp then
-                                        table.insert(existing, e)
-                                    end
-                                end
-                                for _, e in ipairs(existing) do pcall(function() e:Destroy() end) end
-
-                                local clone = mesh:Clone()
-                                clone.Parent = hum
-                                morph_state.meshes[bp] = clone
-                                applied = applied + 1
-                                print(string.format("[MORPH] %s body part %s <- asset %d", label, bp.Name, item.id))
                             else
-                                print(string.format("[MORPH] %s asset %d (body part) had no CharacterMesh", label, item.id))
+                                print(string.format("[MORPH] %s asset %d (%s) had no usable mesh/texture", label, item.id, partName))
                             end
                         else
                             print(string.format("[MORPH] %s failed to load asset %d: %s", label, item.id, tostring(objs)))
@@ -12735,7 +12784,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             end)
                         end
 
-                        local applied = apply_morph_items(hum, char, items, "user:" .. target)
+                        local applied = apply_morph_items(char, items, "user:" .. target)
                         if applied > 0 then
                             library:Notify(string.format("Morph: applied %d parts from %s (visual only, local)", applied, target), 4)
                         else
@@ -12795,7 +12844,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         end
 
                         snapshot_body_colors(char)
-                        local applied = apply_morph_items(hum, char, items, "bundle:" .. tostring(data.name))
+                        local applied = apply_morph_items(char, items, "bundle:" .. tostring(data.name))
                         if applied > 0 then
                             library:Notify(string.format("Morph: applied %d parts from %s (visual only, local)", applied, tostring(data.name or bundleId)), 4)
                         else
@@ -12812,10 +12861,21 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         local char = plr.Character
                         if not char then return end
 
-                        for _, mesh in pairs(morph_state.meshes) do
-                            pcall(function() mesh:Destroy() end)
+                        for part, snap in pairs(morph_state.part_snapshots) do
+                            if part and part.Parent then
+                                local sm = part:FindFirstChildOfClass("SpecialMesh")
+                                if snap.created then
+                                    if sm then pcall(function() sm:Destroy() end) end
+                                elseif sm then
+                                    pcall(function()
+                                        sm.MeshId = snap.meshId
+                                        sm.TextureId = snap.textureId
+                                        sm.MeshType = snap.meshType
+                                    end)
+                                end
+                            end
                         end
-                        morph_state.meshes = {}
+                        morph_state.part_snapshots = {}
 
                         for _, acc in ipairs(morph_state.accessories) do
                             pcall(function() acc:Destroy() end)
@@ -26748,7 +26808,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 348 loaded - Character Morph rebuilt: R6 CharacterMesh/Accessory swap instead of blocked ApplyDescription, visual-only/local", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 349 loaded - Character Morph: body parts now copy MeshPart mesh/texture directly onto your own parts (modern bundles aren't CharacterMesh-based)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
