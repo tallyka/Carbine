@@ -12702,11 +12702,24 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if textureId and textureId ~= "" then
                         newPart.TextureID = textureId
                     end
+                    -- Assigning MeshId resizes the MeshPart to the mesh's own native
+                    -- bounding box, overwriting whatever Size was set earlier - force
+                    -- it back down to the original R6 part's size AFTER MeshId, or it
+                    -- renders at the mesh's true (much larger) scale.
+                    newPart.Size = part.Size
+                    newPart.CFrame = part.CFrame
                 end)
                 if not ok then
                     pcall(function() newPart:Destroy() end)
                     return false, err
                 end
+
+                -- A dynamically-created MeshPart's assigned mesh content isn't
+                -- guaranteed to actually be fetched/displayed just from setting
+                -- MeshId - force it to load before anyone can see the part.
+                pcall(function()
+                    game:GetService("ContentProvider"):PreloadAsync({ newPart })
+                end)
 
                 local movedChildren = {}
                 for _, child in ipairs(part:GetChildren()) do
@@ -26921,7 +26934,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 353 loaded - Character Morph: full MeshPart+Motor6D swap for body parts (SpecialMesh couldn't render modern skinned bundle meshes)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 354 loaded - Character Morph: preload mesh content + fix Size getting reset to the mesh's native (oversized) bounding box", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
