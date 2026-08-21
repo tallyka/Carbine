@@ -12804,11 +12804,32 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     partName, tostring(realSize), tostring(edgeDir), tostring(edgeOffset.Y)))
                 local o = morph_state.part_offsets[partName]
                 local manualOffset = o and (CFrame.new(o.x, o.y, o.z) * CFrame.Angles(math.rad(o.rx), math.rad(o.ry), math.rad(o.rz))) or CFrame.new()
+
+                -- The child-side fix alone still left everything fused, because the
+                -- JOINT ITSELF comes from Torso's own C0 for each of its 6 joints -
+                -- still calibrated for the tiny classic R6 torso box even after
+                -- fixing where Head/Arms/Legs reach FROM that point. Same edge logic,
+                -- applied to Torso's own measured size: Neck/Shoulders reach toward
+                -- the top of the torso, Hips toward the bottom.
+                local TORSO_C0_EDGE_DIRECTION = {
+                    Neck = 1, ["Left Shoulder"] = 1, ["Right Shoulder"] = 1,
+                    ["Left Hip"] = -1, ["Right Hip"] = -1,
+                }
+
                 for _, m in ipairs(motors) do
                     pcall(function()
                         if not m.origC1 then m.origC1 = m.motor.C1 end
                         if m.slot == "Part0" then
                             m.motor.Part0 = newPart
+                            if partName == "Torso" then
+                                if not m.origC0 then m.origC0 = m.motor.C0 end
+                                local dir = TORSO_C0_EDGE_DIRECTION[m.motor.Name]
+                                if dir then
+                                    local c0Edge = CFrame.new(0, dir * (sizeY / 2), 0)
+                                    m.motor.C0 = c0Edge * (m.origC0 - m.origC0.Position)
+                                    print(string.format("[MORPH] Torso C0 fixed for joint '%s', dir=%d", m.motor.Name, dir))
+                                end
+                            end
                         else
                             m.motor.Part1 = newPart
                             if strip_c1_position then
@@ -13133,6 +13154,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                                     pcall(function()
                                         if m.slot == "Part0" then
                                             m.motor.Part0 = info.originalPart
+                                            if m.origC0 then m.motor.C0 = m.origC0 end
                                         else
                                             m.motor.Part1 = info.originalPart
                                             if m.origC1 then m.motor.C1 = m.origC1 end
@@ -27085,7 +27107,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 363 loaded - Character Morph: read the real mesh Size from the SOURCE asset instead of the unreliable freshly-created part, should auto-align now", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 364 loaded - Character Morph: also fixed Torso's own C0 for all 6 joints (was still using tiny-R6-box math, fusing everything to it)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
