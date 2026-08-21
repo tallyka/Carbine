@@ -27212,7 +27212,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 368 loaded - Character Morph: reference model Size for Head/Arms/Legs (worked), real native Size for Torso only (was squished)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 369 loaded - fixed Self Fall Damage hook silently eating real fall-damage calls on any calibration error (unprotected pcall)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -31708,20 +31708,30 @@ end
                     local old
                     pcall(function()
                         old = hookfunction(r.FireServer, function(self, ...)
-                            if self == r then
-                                local args = { ... }
-                                if #args == 2 and typeof(args[1]) == "table" and typeof(args[2]) == "table" then
-                                    local a1 = args[1]
-                                    local n, a2n = 0, 0
-                                    for _ in pairs(a1) do n = n + 1 end
-                                    for _ in pairs(args[2]) do a2n = a2n + 1 end
-                                    if n == 2 and a2n == 0 and typeof(a1[1]) == "number" and typeof(a1[2]) == "number" then
-                                        getgenv().Carbine_FallDamageRemote = r
-                                        sd_last[1], sd_last[2] = a1[1], a1[2]
-                                        library:Notify(string.format("Self Damage: recalibrated (%.4f, %.4f)", a1[1], a1[2]), 3)
+                            -- The calibration logic below was NOT pcall-wrapped, so
+                            -- any unexpected error on a real fall (edge case in the
+                            -- server's actual arg shape, anything) would throw BEFORE
+                            -- reaching "return old(...)" - silently eating that real
+                            -- FireServer call and never sending it to the server at
+                            -- all. That's a genuine no-fall-damage side effect nobody
+                            -- asked for, and a ban risk. Guarantee the real call
+                            -- always goes through no matter what happens above it.
+                            local args = { ... }
+                            pcall(function()
+                                if self == r then
+                                    if #args == 2 and typeof(args[1]) == "table" and typeof(args[2]) == "table" then
+                                        local a1 = args[1]
+                                        local n, a2n = 0, 0
+                                        for _ in pairs(a1) do n = n + 1 end
+                                        for _ in pairs(args[2]) do a2n = a2n + 1 end
+                                        if n == 2 and a2n == 0 and typeof(a1[1]) == "number" and typeof(a1[2]) == "number" then
+                                            getgenv().Carbine_FallDamageRemote = r
+                                            sd_last[1], sd_last[2] = a1[1], a1[2]
+                                            library:Notify(string.format("Self Damage: recalibrated (%.4f, %.4f)", a1[1], a1[2]), 3)
+                                        end
                                     end
                                 end
-                            end
+                            end)
                             return old(self, ...)
                         end)
                     end)
