@@ -12585,7 +12585,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 [30] = "Left Leg", [31] = "Right Leg",
             }
 
-            local morph_state = { part_snapshots = {}, accessories = {}, original_colors = nil }
+            local morph_state = { part_snapshots = {}, swapped_parts = {}, accessories = {}, original_colors = nil }
 
             local function find_of_class(objs, classNames)
                 for _, obj in ipairs(objs) do
@@ -12668,39 +12668,87 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     return setok, seterr
                 end
 
-                local sm = part:FindFirstChildOfClass("SpecialMesh")
-                local created = false
-                if not sm then
-                    sm = Instance.new("SpecialMesh")
-                    sm.Parent = part
-                    created = true
-                end
-
-                if not morph_state.part_snapshots[part] then
-                    morph_state.part_snapshots[part] = {
-                        isMeshPart = false,
-                        created = created,
-                        meshId = created and "" or sm.MeshId,
-                        textureId = created and "" or sm.TextureId,
-                        meshType = created and Enum.MeshType.FileMesh or sm.MeshType,
-                    }
-                end
-
-                local setok, seterr = pcall(function()
-                    sm.MeshType = Enum.MeshType.FileMesh
-                    sm.MeshId = meshId
-                    if textureId and textureId ~= "" then
-                        sm.TextureId = textureId
-                    end
-                    print(string.format("[MORPH] %s immediate readback: Parent=%s MeshId=%s MeshType=%s",
-                        partName, tostring(sm.Parent), tostring(sm.MeshId), tostring(sm.MeshType)))
-                    task.spawn(function()
-                        task.wait(1)
-                        print(string.format("[MORPH] %s recheck after 1s: Parent=%s MeshId=%s stillExists=%s",
-                            partName, tostring(sm.Parent), tostring(sm.MeshId), tostring(sm.Parent ~= nil)))
+                -- Legacy Part + SpecialMesh confirmed live to be a no-op for these
+                -- modern bundle meshes (data set correctly, verified present a full
+                -- second later, still rendered as the plain default block - almost
+                -- certainly a skinned/rigged mesh format the old static SpecialMesh
+                -- renderer can't display). So instead, fully REPLACE the R6 Part with
+                -- a real MeshPart carrying the same mesh/texture, and retarget every
+                -- Motor6D joint that referenced the old part onto the new one so it
+                -- still moves with animations. The original part is kept (hidden,
+                -- renamed) rather than destroyed, purely so Reset can restore it.
+                local already = morph_state.swapped_parts[partName]
+                if already and already.newPart and already.newPart.Parent then
+                    local setok, seterr = pcall(function()
+                        already.newPart.MeshId = meshId
+                        if textureId and textureId ~= "" then
+                            already.newPart.TextureID = textureId
+                        end
                     end)
+                    return setok, seterr
+                end
+
+                local newPart = Instance.new("MeshPart")
+                local ok, err = pcall(function()
+                    newPart.Name = partName
+                    newPart.Size = part.Size
+                    newPart.CFrame = part.CFrame
+                    newPart.Anchored = false
+                    newPart.Massless = true
+                    newPart.CanCollide = part.CanCollide
+                    newPart.CanQuery = part.CanQuery
+                    newPart.CanTouch = part.CanTouch
+                    newPart.MeshId = meshId
+                    if textureId and textureId ~= "" then
+                        newPart.TextureID = textureId
+                    end
                 end)
-                return setok, seterr
+                if not ok then
+                    pcall(function() newPart:Destroy() end)
+                    return false, err
+                end
+
+                local movedChildren = {}
+                for _, child in ipairs(part:GetChildren()) do
+                    if not child:IsA("Motor6D") then
+                        table.insert(movedChildren, child)
+                    end
+                end
+
+                local motors = {}
+                for _, d in ipairs(char:GetDescendants()) do
+                    if d:IsA("Motor6D") then
+                        if d.Part0 == part then table.insert(motors, { motor = d, slot = "Part0" }) end
+                        if d.Part1 == part then table.insert(motors, { motor = d, slot = "Part1" }) end
+                    end
+                end
+
+                newPart.Parent = char
+                for _, child in ipairs(movedChildren) do
+                    pcall(function() child.Parent = newPart end)
+                end
+                for _, m in ipairs(motors) do
+                    pcall(function()
+                        if m.slot == "Part0" then m.motor.Part0 = newPart else m.motor.Part1 = newPart end
+                    end)
+                end
+
+                local origCanCollide, origCanQuery, origCanTouch = part.CanCollide, part.CanQuery, part.CanTouch
+                pcall(function()
+                    part.Name = partName .. "_MorphOriginal"
+                    part.Transparency = 1
+                    part.CanCollide = false
+                    part.CanQuery = false
+                    part.CanTouch = false
+                end)
+
+                morph_state.swapped_parts[partName] = {
+                    originalPart = part, newPart = newPart, motors = motors, movedChildren = movedChildren,
+                    origCanCollide = origCanCollide, origCanQuery = origCanQuery, origCanTouch = origCanTouch,
+                }
+
+                print(string.format("[MORPH] %s swapped Part -> MeshPart, %d joint(s) retargeted", partName, #motors))
+                return true
             end
 
             local function apply_morph_items(char, items, label)
@@ -12910,27 +12958,37 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         if not char then return end
 
                         for part, snap in pairs(morph_state.part_snapshots) do
-                            if part and part.Parent then
-                                if snap.isMeshPart then
-                                    pcall(function()
-                                        part.MeshId = snap.meshId
-                                        part.TextureID = snap.textureId
-                                    end)
-                                else
-                                    local sm = part:FindFirstChildOfClass("SpecialMesh")
-                                    if snap.created then
-                                        if sm then pcall(function() sm:Destroy() end) end
-                                    elseif sm then
-                                        pcall(function()
-                                            sm.MeshId = snap.meshId
-                                            sm.TextureId = snap.textureId
-                                            sm.MeshType = snap.meshType
-                                        end)
-                                    end
-                                end
+                            if part and part.Parent and snap.isMeshPart then
+                                pcall(function()
+                                    part.MeshId = snap.meshId
+                                    part.TextureID = snap.textureId
+                                end)
                             end
                         end
                         morph_state.part_snapshots = {}
+
+                        for partName, info in pairs(morph_state.swapped_parts) do
+                            if info.originalPart and info.originalPart.Parent then
+                                for _, m in ipairs(info.motors) do
+                                    pcall(function()
+                                        if m.slot == "Part0" then m.motor.Part0 = info.originalPart
+                                        else m.motor.Part1 = info.originalPart end
+                                    end)
+                                end
+                                for _, child in ipairs(info.movedChildren) do
+                                    pcall(function() child.Parent = info.originalPart end)
+                                end
+                                pcall(function()
+                                    info.originalPart.Name = partName
+                                    info.originalPart.Transparency = 0
+                                    info.originalPart.CanCollide = info.origCanCollide
+                                    info.originalPart.CanQuery = info.origCanQuery
+                                    info.originalPart.CanTouch = info.origCanTouch
+                                end)
+                            end
+                            if info.newPart then pcall(function() info.newPart:Destroy() end) end
+                        end
+                        morph_state.swapped_parts = {}
 
                         for _, acc in ipairs(morph_state.accessories) do
                             pcall(function() acc:Destroy() end)
@@ -26863,7 +26921,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 352 loaded - Character Morph: added immediate + 1s-delayed readback prints to check if the game strips added SpecialMesh instances", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 353 loaded - Character Morph: full MeshPart+Motor6D swap for body parts (SpecialMesh couldn't render modern skinned bundle meshes)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
