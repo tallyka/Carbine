@@ -12762,9 +12762,28 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 for _, child in ipairs(movedChildren) do
                     pcall(function() child.Parent = newPart end)
                 end
+
+                -- Head/Arms/Legs are always the CHILD (Part1) side of their joint in
+                -- R6 (Neck/Shoulder/Hip). R6's C1 was calibrated assuming that part's
+                -- local origin is its geometric center - but these modern meshes are
+                -- rigged with their local origin AT the joint/attachment point itself
+                -- (confirmed live: head/legs rendered sunk into the torso, exactly the
+                -- symptom of double-applying that offset). Zeroing C1 for those parts
+                -- treats the new mesh's own origin as the joint, matching how it was
+                -- actually authored. Not touched for Torso, since its C0 side (the
+                -- parent reference for all 6 of its joints) wasn't reported broken and
+                -- adjusting it blind risks making something that already looks right
+                -- worse.
+                local zero_c1 = partName ~= "Torso"
                 for _, m in ipairs(motors) do
                     pcall(function()
-                        if m.slot == "Part0" then m.motor.Part0 = newPart else m.motor.Part1 = newPart end
+                        if not m.origC1 then m.origC1 = m.motor.C1 end
+                        if m.slot == "Part0" then
+                            m.motor.Part0 = newPart
+                        else
+                            m.motor.Part1 = newPart
+                            if zero_c1 then m.motor.C1 = CFrame.new() end
+                        end
                     end)
                 end
 
@@ -13006,8 +13025,12 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             if info.originalPart and info.originalPart.Parent then
                                 for _, m in ipairs(info.motors) do
                                     pcall(function()
-                                        if m.slot == "Part0" then m.motor.Part0 = info.originalPart
-                                        else m.motor.Part1 = info.originalPart end
+                                        if m.slot == "Part0" then
+                                            m.motor.Part0 = info.originalPart
+                                        else
+                                            m.motor.Part1 = info.originalPart
+                                            if m.origC1 then m.motor.C1 = m.origC1 end
+                                        end
                                     end)
                                 end
                                 for _, child in ipairs(info.movedChildren) do
@@ -26956,7 +26979,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 356 loaded - Character Morph: clone SurfaceAppearance for real texture/color (was flat gray) + Head/DynamicHead now swaps too", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 357 loaded - Character Morph: fixed Head/Arms/Legs sinking into torso (zeroed joint C1, was double-offsetting against the mesh's own origin)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
