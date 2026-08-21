@@ -12786,6 +12786,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 local strip_c1_position = partName ~= "Torso"
                 local edgeDir = JOINT_EDGE_DIRECTION[partName]
                 local edgeOffset = edgeDir and CFrame.new(0, edgeDir * (newPart.Size.Y / 2), 0) or CFrame.new()
+                print(string.format("[MORPH] %s measured Size=%s edgeDir=%s edgeOffsetY=%s",
+                    partName, tostring(newPart.Size), tostring(edgeDir), tostring(edgeOffset.Y)))
                 local o = morph_state.part_offsets[partName]
                 local manualOffset = o and (CFrame.new(o.x, o.y, o.z) * CFrame.Angles(math.rad(o.rx), math.rad(o.ry), math.rad(o.rz))) or CFrame.new()
                 for _, m in ipairs(motors) do
@@ -12796,7 +12798,14 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         else
                             m.motor.Part1 = newPart
                             if strip_c1_position then
-                                m.baseC1 = (m.origC1 - m.origC1.Position) * edgeOffset
+                                -- Position-CFrame first, rotation second (the
+                                -- standard CFrame.new(pos) * CFrame.Angles(...)
+                                -- idiom) - edgeOffset must be expressed in Part1's
+                                -- PLAIN local axes, not rotated by the calibrated
+                                -- joint rotation. Had this backwards before, which
+                                -- applied the edge offset along the rotated mesh
+                                -- axes instead of its actual up/down axis.
+                                m.baseC1 = edgeOffset * (m.origC1 - m.origC1.Position)
                                 m.motor.C1 = m.baseC1 * manualOffset
                             end
                         end
@@ -27062,7 +27071,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 360 loaded - Character Morph: joints now auto-position at the measured mesh's real edge (bottom of head, top of limbs) instead of its center", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 361 loaded - Character Morph: fixed edge-offset multiplication order (was applying it along rotated axes instead of plain local axes)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
