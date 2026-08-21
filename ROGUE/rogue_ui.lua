@@ -12735,12 +12735,25 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             -- are the REAL values, not a guess, so applying them to our actual
             -- character's retargeted joints should align exactly like the reference.
             local function harvest_reference_offsets(referenceModel)
-                local offsets = { c0 = {}, c1 = {} }
+                local offsets = { c0 = {}, c1 = {}, sizes = {} }
                 for _, d in ipairs(referenceModel:GetDescendants()) do
                     if d:IsA("Motor6D") then
                         offsets.c0[d.Name] = d.C0
                         offsets.c1[d.Name] = d.C1
                         print(string.format("[MORPH] reference joint '%s': C0=%s C1=%s", d.Name, tostring(d.C0), tostring(d.C1)))
+                    end
+                end
+                -- The joints above assume standard R6 skeleton proportions - but the
+                -- mesh's own NATIVE size (what we were using) has nothing to do with
+                -- that scale, which is exactly why limbs rendered "way too small"
+                -- relative to correctly-spaced joints. Roblox scaled each part to fit
+                -- the R6 skeleton when building this reference model - grab THAT size
+                -- instead of the raw catalog asset's native one.
+                for _, partName in ipairs({"Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg"}) do
+                    local refPart = referenceModel:FindFirstChild(partName)
+                    if refPart and refPart:IsA("BasePart") then
+                        offsets.sizes[partName] = refPart.Size
+                        print(string.format("[MORPH] reference %s Size=%s", partName, tostring(refPart.Size)))
                     end
                 end
                 return offsets
@@ -12750,6 +12763,15 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 local part = char:FindFirstChild(partName)
                 if not (part and part:IsA("BasePart")) then return false end
                 print(string.format("[MORPH] %s is a %s", partName, part.ClassName))
+
+                -- The reference model's Size is what Roblox itself scaled this mesh
+                -- to when fitting it onto the standard R6 skeleton those harvested
+                -- joint offsets assume - use that over the raw native asset size,
+                -- which has no relation to that scale (confirmed live: correct joint
+                -- spacing + native mesh size rendered arms/legs way too small).
+                if referenceOffsets and referenceOffsets.sizes and referenceOffsets.sizes[partName] then
+                    realSize = referenceOffsets.sizes[partName]
+                end
 
                 -- If the rig's own body parts ARE MeshParts (common in stylized
                 -- games like this one), the part's own MeshId IS the visible shape -
@@ -27188,7 +27210,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 365 loaded - Character Morph: now builds a real reference model via CreateHumanoidModelFromDescription and uses Roblox's own computed joint offsets", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 366 loaded - Character Morph: now also uses the reference model's scaled Size (was using native mesh size, made limbs way too small)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
