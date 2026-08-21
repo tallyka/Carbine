@@ -12580,7 +12580,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             -- SpecialMesh's is "TextureId" - genuinely different Roblox API casing,
             -- confirmed against the official class docs, not a typo.
             local ASSETTYPE_TO_PARTNAME = {
-                [17] = "Head", [27] = "Torso",
+                [17] = "Head", [79] = "Head", [27] = "Torso",
                 [28] = "Right Arm", [29] = "Left Arm",
                 [30] = "Left Leg", [31] = "Right Leg",
             }
@@ -12616,6 +12616,12 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 return id and ("rbxassetid://" .. id) or nil
             end
 
+            -- Modern meshes commonly carry their actual color/texture on a
+            -- SurfaceAppearance child (PBR material) instead of the legacy
+            -- TextureID property - confirmed live (mesh rendered, but flat gray,
+            -- meaning TextureID was empty). Grab it too so it can be cloned onto
+            -- our new part; SurfaceAppearance just needs to be parented under a
+            -- MeshPart to apply, no property extraction needed.
             local function extract_mesh_and_texture(objs)
                 local meshPart = find_of_class(objs, {"MeshPart"})
                 if meshPart then
@@ -12623,26 +12629,37 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if meshId then
                         local rawTex = ""
                         pcall(function() rawTex = tostring(meshPart.TextureID) end)
-                        return meshId, normalize_content_id(rawTex) or ""
+                        local surfaceAppearance = meshPart:FindFirstChildOfClass("SurfaceAppearance")
+                        return meshId, normalize_content_id(rawTex) or "", surfaceAppearance
                     end
                 end
                 local specialMesh = find_of_class(objs, {"SpecialMesh", "FileMesh"})
                 if specialMesh then
                     local meshId = normalize_content_id(tostring(specialMesh.MeshId))
                     if meshId then
-                        return meshId, normalize_content_id(tostring(specialMesh.TextureId)) or ""
+                        return meshId, normalize_content_id(tostring(specialMesh.TextureId)) or "", nil
                     end
                 end
                 local charMesh = find_of_class(objs, {"CharacterMesh"})
                 if charMesh and charMesh.MeshId and charMesh.MeshId ~= 0 then
                     local texId = (charMesh.BaseTextureId and charMesh.BaseTextureId ~= 0)
                         and ("rbxassetid://" .. tostring(charMesh.BaseTextureId)) or ""
-                    return "rbxassetid://" .. tostring(charMesh.MeshId), texId
+                    return "rbxassetid://" .. tostring(charMesh.MeshId), texId, nil
                 end
-                return nil, nil
+                return nil, nil, nil
             end
 
-            local function set_part_mesh(char, partName, meshId, textureId)
+            local function apply_surface_appearance(targetPart, surfaceAppearance)
+                if not surfaceAppearance then return end
+                local existing = targetPart:FindFirstChildOfClass("SurfaceAppearance")
+                if existing then pcall(function() existing:Destroy() end) end
+                pcall(function()
+                    local clone = surfaceAppearance:Clone()
+                    clone.Parent = targetPart
+                end)
+            end
+
+            local function set_part_mesh(char, partName, meshId, textureId, surfaceAppearance)
                 local part = char:FindFirstChild(partName)
                 if not (part and part:IsA("BasePart")) then return false end
                 print(string.format("[MORPH] %s is a %s", partName, part.ClassName))
@@ -12665,6 +12682,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             part.TextureID = textureId
                         end
                     end)
+                    apply_surface_appearance(part, surfaceAppearance)
                     return setok, seterr
                 end
 
@@ -12685,6 +12703,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             already.newPart.TextureID = textureId
                         end
                     end)
+                    apply_surface_appearance(already.newPart, surfaceAppearance)
                     return setok, seterr
                 end
 
@@ -12714,6 +12733,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     pcall(function() newPart:Destroy() end)
                     return false, err
                 end
+
+                apply_surface_appearance(newPart, surfaceAppearance)
 
                 -- A dynamically-created MeshPart's assigned mesh content isn't
                 -- guaranteed to actually be fetched/displayed just from setting
@@ -12772,9 +12793,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if partName then
                         local ok, objs = pcall(function() return game:GetObjects("rbxassetid://" .. item.id) end)
                         if ok and objs and #objs > 0 then
-                            local meshId, texId = extract_mesh_and_texture(objs)
+                            local meshId, texId, surfaceAppearance = extract_mesh_and_texture(objs)
                             if meshId then
-                                local setok, seterr = set_part_mesh(char, partName, meshId, texId)
+                                local setok, seterr = set_part_mesh(char, partName, meshId, texId, surfaceAppearance)
                                 if setok then
                                     applied = applied + 1
                                     print(string.format("[MORPH] %s %s <- asset %d (mesh %s)", label, partName, item.id, meshId))
@@ -26935,7 +26956,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 355 loaded - Character Morph: stopped forcing mesh Size down (was squashing it invisible) - lets meshes render at native size", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 356 loaded - Character Morph: clone SurfaceAppearance for real texture/color (was flat gray) + Head/DynamicHead now swaps too", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
