@@ -12764,14 +12764,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 if not (part and part:IsA("BasePart")) then return false end
                 print(string.format("[MORPH] %s is a %s", partName, part.ClassName))
 
-                -- The reference model's Size is what Roblox itself scaled this mesh
-                -- to when fitting it onto the standard R6 skeleton those harvested
-                -- joint offsets assume - use that over the raw native asset size,
-                -- which has no relation to that scale (confirmed live: correct joint
-                -- spacing + native mesh size rendered arms/legs way too small).
-                if referenceOffsets and referenceOffsets.sizes and referenceOffsets.sizes[partName] then
-                    realSize = referenceOffsets.sizes[partName]
-                end
+                -- Tried forcing Size to the reference model's classic-R6-box
+                -- dimensions (2x2x1 etc) - confirmed live that squishes/compresses
+                -- the mesh, since it doesn't actually match this bundle's real
+                -- proportions. The harvested joint C0/C1 are pure position+rotation,
+                -- independent of Size, so they stay correct regardless - only Size
+                -- itself needs to come from the real mesh (realSize, as extracted
+                -- from the source asset), not the reference model's generic box.
 
                 -- If the rig's own body parts ARE MeshParts (common in stylized
                 -- games like this one), the part's own MeshId IS the visible shape -
@@ -27210,7 +27209,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 366 loaded - Character Morph: now also uses the reference model's scaled Size (was using native mesh size, made limbs way too small)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 367 loaded - Character Morph: reverted to real native mesh Size (reference model's classic R6 box size was squishing meshes)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
