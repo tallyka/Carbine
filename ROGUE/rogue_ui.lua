@@ -12585,6 +12585,17 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 [30] = "Left Leg", [31] = "Right Leg",
             }
 
+            -- Which edge of the NEW part's own (measured) bounding box the joint
+            -- should sit at, instead of the box's center: the neck connects to the
+            -- BOTTOM of the head (head sits above/on top of the joint), while
+            -- shoulders/hips connect to the TOP of arms/legs (they hang down below
+            -- the joint). +1 = top of the box, -1 = bottom.
+            local JOINT_EDGE_DIRECTION = {
+                Head = -1,
+                ["Left Arm"] = 1, ["Right Arm"] = 1,
+                ["Left Leg"] = 1, ["Right Leg"] = 1,
+            }
+
             local morph_state = { part_snapshots = {}, swapped_parts = {}, accessories = {}, original_colors = nil, part_offsets = {} }
 
             local function find_of_class(objs, classNames)
@@ -12763,18 +12774,20 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     pcall(function() child.Parent = newPart end)
                 end
 
-                -- No single formula reliably aligns an arbitrary catalog mesh never
-                -- authored for R6 (confirmed live across 3 different attempts: sunk
-                -- in, rotated wrong, fully collapsed together - every mesh apparently
-                -- has its own different internal pivot). So this now just picks a
-                -- reasonable starting point (strip C1's position, keep its rotation)
-                -- and exposes a manual per-part offset (position + rotation) below
-                -- that gets layered on top and can be live-tuned until it looks
-                -- right - baseC1 is stored per motor so the tuning UI can recompute
-                -- C1 = baseC1 * offset any time without needing the original C1 again.
+                -- Center-based C1 sank the joint inside the (much bigger) new mesh;
+                -- zero-translation collapsed it flush against the parent with no
+                -- separation at all - both consistent with the mesh's local origin
+                -- actually being near its OWN geometric center, same as the old tiny
+                -- R6 part, just scaled up. So instead of centering the joint, put it
+                -- at the correct EDGE of the new part's real (measured) bounding box
+                -- - bottom of the head, top of arms/legs - using newPart.Size, which
+                -- reflects this specific mesh's true dimensions. Manual offset below
+                -- still layers on top for whatever this heuristic doesn't nail.
                 local strip_c1_position = partName ~= "Torso"
+                local edgeDir = JOINT_EDGE_DIRECTION[partName]
+                local edgeOffset = edgeDir and CFrame.new(0, edgeDir * (newPart.Size.Y / 2), 0) or CFrame.new()
                 local o = morph_state.part_offsets[partName]
-                local offset = o and (CFrame.new(o.x, o.y, o.z) * CFrame.Angles(math.rad(o.rx), math.rad(o.ry), math.rad(o.rz))) or CFrame.new()
+                local manualOffset = o and (CFrame.new(o.x, o.y, o.z) * CFrame.Angles(math.rad(o.rx), math.rad(o.ry), math.rad(o.rz))) or CFrame.new()
                 for _, m in ipairs(motors) do
                     pcall(function()
                         if not m.origC1 then m.origC1 = m.motor.C1 end
@@ -12783,8 +12796,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         else
                             m.motor.Part1 = newPart
                             if strip_c1_position then
-                                m.baseC1 = m.origC1 - m.origC1.Position
-                                m.motor.C1 = m.baseC1 * offset
+                                m.baseC1 = (m.origC1 - m.origC1.Position) * edgeOffset
+                                m.motor.C1 = m.baseC1 * manualOffset
                             end
                         end
                     end)
@@ -27049,7 +27062,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 359 loaded - Character Morph: added manual Fine-Tune Part offset/rotation sliders since no formula reliably aligns arbitrary meshes", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 360 loaded - Character Morph: joints now auto-position at the measured mesh's real edge (bottom of head, top of limbs) instead of its center", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
