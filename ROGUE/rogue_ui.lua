@@ -12702,11 +12702,12 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if textureId and textureId ~= "" then
                         newPart.TextureID = textureId
                     end
-                    -- Assigning MeshId resizes the MeshPart to the mesh's own native
-                    -- bounding box, overwriting whatever Size was set earlier - force
-                    -- it back down to the original R6 part's size AFTER MeshId, or it
-                    -- renders at the mesh's true (much larger) scale.
-                    newPart.Size = part.Size
+                    -- Forcing Size back down to the tiny R6 box after MeshId
+                    -- squashes/degenerates the mesh until it's effectively invisible
+                    -- (confirmed live - looked like nothing changed at all). Letting
+                    -- it keep the mesh's own native size renders an oversized but
+                    -- actually visible/correct-shaped character, which is what we
+                    -- actually want here (purely cosmetic, size doesn't matter).
                     newPart.CFrame = part.CFrame
                 end)
                 if not ok then
@@ -26934,7 +26935,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 354 loaded - Character Morph: preload mesh content + fix Size getting reset to the mesh's native (oversized) bounding box", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 355 loaded - Character Morph: stopped forcing mesh Size down (was squashing it invisible) - lets meshes render at native size", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
