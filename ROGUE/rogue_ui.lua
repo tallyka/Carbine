@@ -12677,7 +12677,76 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 end)
             end
 
-            local function set_part_mesh(char, partName, meshId, textureId, surfaceAppearance, realSize)
+            -- Every hand-guessed joint alignment attempt failed because there's no
+            -- way to know a given mesh's true local pivot from a script. Roblox's
+            -- OWN avatar-assembly engine already solves exactly this problem every
+            -- time it builds a dressed character - CreateHumanoidModelFromDescription
+            -- builds a complete, correctly-rigged model from a HumanoidDescription,
+            -- and (unlike Humanoid:ApplyDescription, which is server-locked in this
+            -- game) it's a standalone constructor that doesn't touch an existing
+            -- character, so it isn't gated the same way. Build a throwaway reference
+            -- model with it, then harvest the joint offsets ROBLOX computed and apply
+            -- those to the real character instead of guessing.
+            local HUMDESC_SINGULAR_FIELD = {
+                [17] = "Head", [79] = "Head", [18] = "Face",
+                [11] = "Shirt", [12] = "Pants", [2] = "GraphicTShirt",
+                [27] = "Torso", [28] = "RightArm", [29] = "LeftArm", [30] = "LeftLeg", [31] = "RightLeg",
+            }
+            local HUMDESC_LIST_FIELD = {
+                [8] = "HatAccessory", [41] = "HairAccessory", [42] = "FaceAccessory",
+                [43] = "NeckAccessory", [44] = "ShouldersAccessory", [45] = "FrontAccessory",
+                [46] = "BackAccessory", [47] = "WaistAccessory", [57] = "EarAccessory",
+                [58] = "EyeAccessory", [64] = "TShirtAccessory", [65] = "ShirtAccessory",
+                [66] = "PantsAccessory", [67] = "JacketAccessory", [68] = "SweaterAccessory",
+                [69] = "ShortsAccessory", [70] = "LeftShoeAccessory", [71] = "RightShoeAccessory",
+                [72] = "DressSkirtAccessory", [76] = "EyebrowAccessory", [77] = "EyelashAccessory",
+            }
+
+            local function build_reference_model(items)
+                local desc = Instance.new("HumanoidDescription")
+                local list_values = {}
+                for _, item in ipairs(items) do
+                    local singular = HUMDESC_SINGULAR_FIELD[item.assetType]
+                    local list_field = HUMDESC_LIST_FIELD[item.assetType]
+                    if singular then
+                        pcall(function() desc[singular] = item.id end)
+                    elseif list_field then
+                        list_values[list_field] = list_values[list_field] or {}
+                        table.insert(list_values[list_field], tostring(item.id))
+                    end
+                end
+                for field, ids in pairs(list_values) do
+                    pcall(function() desc[field] = table.concat(ids, ",") end)
+                end
+
+                local Players = game:GetService("Players")
+                local ok, modelOrErr = pcall(function()
+                    return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
+                end)
+                print(string.format("[MORPH] CreateHumanoidModelFromDescription ok=%s result=%s", tostring(ok), tostring(modelOrErr)))
+                if ok and modelOrErr then
+                    return modelOrErr
+                end
+                return nil, modelOrErr
+            end
+
+            -- Pulls every Motor6D's C0/C1 straight off Roblox's own correctly-built
+            -- reference model, keyed by joint name (Neck, Left Shoulder, etc) - these
+            -- are the REAL values, not a guess, so applying them to our actual
+            -- character's retargeted joints should align exactly like the reference.
+            local function harvest_reference_offsets(referenceModel)
+                local offsets = { c0 = {}, c1 = {} }
+                for _, d in ipairs(referenceModel:GetDescendants()) do
+                    if d:IsA("Motor6D") then
+                        offsets.c0[d.Name] = d.C0
+                        offsets.c1[d.Name] = d.C1
+                        print(string.format("[MORPH] reference joint '%s': C0=%s C1=%s", d.Name, tostring(d.C0), tostring(d.C1)))
+                    end
+                end
+                return offsets
+            end
+
+            local function set_part_mesh(char, partName, meshId, textureId, surfaceAppearance, realSize, referenceOffsets)
                 local part = char:FindFirstChild(partName)
                 if not (part and part:IsA("BasePart")) then return false end
                 print(string.format("[MORPH] %s is a %s", partName, part.ClassName))
@@ -12785,32 +12854,17 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     pcall(function() child.Parent = newPart end)
                 end
 
-                -- Center-based C1 sank the joint inside the (much bigger) new mesh;
-                -- zero-translation collapsed it flush against the parent with no
-                -- separation at all - both consistent with the mesh's local origin
-                -- actually being near its OWN geometric center, same as the old tiny
-                -- R6 part, just scaled up. So instead of centering the joint, put it
-                -- at the correct EDGE of the new part's real bounding box - bottom of
-                -- the head, top of arms/legs. Using realSize (the SOURCE MeshPart's
-                -- own authored Size, extracted straight from game:GetObjects) instead
-                -- of newPart.Size - confirmed live that reading Size back off our own
-                -- freshly-created Instance gave the exact same placeholder value for
-                -- every single part regardless of mesh, i.e. it wasn't real data.
+                -- If we have real values harvested from Roblox's own correctly-built
+                -- reference model, just USE them directly - no more guessing at
+                -- edges/centers. Only falls back to the old heuristic if the
+                -- reference model wasn't available for some reason.
                 local strip_c1_position = partName ~= "Torso"
                 local edgeDir = JOINT_EDGE_DIRECTION[partName]
                 local sizeY = realSize and realSize.Y or newPart.Size.Y
                 local edgeOffset = edgeDir and CFrame.new(0, edgeDir * (sizeY / 2), 0) or CFrame.new()
-                print(string.format("[MORPH] %s realSize=%s edgeDir=%s edgeOffsetY=%s",
-                    partName, tostring(realSize), tostring(edgeDir), tostring(edgeOffset.Y)))
                 local o = morph_state.part_offsets[partName]
                 local manualOffset = o and (CFrame.new(o.x, o.y, o.z) * CFrame.Angles(math.rad(o.rx), math.rad(o.ry), math.rad(o.rz))) or CFrame.new()
 
-                -- The child-side fix alone still left everything fused, because the
-                -- JOINT ITSELF comes from Torso's own C0 for each of its 6 joints -
-                -- still calibrated for the tiny classic R6 torso box even after
-                -- fixing where Head/Arms/Legs reach FROM that point. Same edge logic,
-                -- applied to Torso's own measured size: Neck/Shoulders reach toward
-                -- the top of the torso, Hips toward the bottom.
                 local TORSO_C0_EDGE_DIRECTION = {
                     Neck = 1, ["Left Shoulder"] = 1, ["Right Shoulder"] = 1,
                     ["Left Hip"] = -1, ["Right Hip"] = -1,
@@ -12823,23 +12877,31 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             m.motor.Part0 = newPart
                             if partName == "Torso" then
                                 if not m.origC0 then m.origC0 = m.motor.C0 end
-                                local dir = TORSO_C0_EDGE_DIRECTION[m.motor.Name]
-                                if dir then
-                                    local c0Edge = CFrame.new(0, dir * (sizeY / 2), 0)
-                                    m.motor.C0 = c0Edge * (m.origC0 - m.origC0.Position)
-                                    print(string.format("[MORPH] Torso C0 fixed for joint '%s', dir=%d", m.motor.Name, dir))
+                                local refC0 = referenceOffsets and referenceOffsets.c0[m.motor.Name]
+                                if refC0 then
+                                    m.motor.C0 = refC0
+                                    print(string.format("[MORPH] Torso C0 for '%s' <- reference model", m.motor.Name))
+                                else
+                                    local dir = TORSO_C0_EDGE_DIRECTION[m.motor.Name]
+                                    if dir then
+                                        local c0Edge = CFrame.new(0, dir * (sizeY / 2), 0)
+                                        m.motor.C0 = c0Edge * (m.origC0 - m.origC0.Position)
+                                    end
                                 end
                             end
                         else
                             m.motor.Part1 = newPart
-                            if strip_c1_position then
+                            local refC1 = referenceOffsets and referenceOffsets.c1[m.motor.Name]
+                            if refC1 then
+                                m.baseC1 = refC1
+                                m.motor.C1 = m.baseC1 * manualOffset
+                                print(string.format("[MORPH] %s C1 for '%s' <- reference model", partName, m.motor.Name))
+                            elseif strip_c1_position then
                                 -- Position-CFrame first, rotation second (the
                                 -- standard CFrame.new(pos) * CFrame.Angles(...)
                                 -- idiom) - edgeOffset must be expressed in Part1's
                                 -- PLAIN local axes, not rotated by the calibrated
-                                -- joint rotation. Had this backwards before, which
-                                -- applied the edge offset along the rotated mesh
-                                -- axes instead of its actual up/down axis.
+                                -- joint rotation.
                                 m.baseC1 = edgeOffset * (m.origC1 - m.origC1.Position)
                                 m.motor.C1 = m.baseC1 * manualOffset
                             end
@@ -12865,7 +12927,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 return true
             end
 
-            local function apply_morph_items(char, items, label)
+            local function apply_morph_items(char, items, label, referenceOffsets)
                 local applied = 0
                 for _, item in ipairs(items) do
                     local partName = ASSETTYPE_TO_PARTNAME[item.assetType]
@@ -12874,7 +12936,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         if ok and objs and #objs > 0 then
                             local meshId, texId, surfaceAppearance, realSize = extract_mesh_and_texture(objs)
                             if meshId then
-                                local setok, seterr = set_part_mesh(char, partName, meshId, texId, surfaceAppearance, realSize)
+                                local setok, seterr = set_part_mesh(char, partName, meshId, texId, surfaceAppearance, realSize, referenceOffsets)
                                 if setok then
                                     applied = applied + 1
                                     print(string.format("[MORPH] %s %s <- asset %d (mesh %s)", label, partName, item.id, meshId))
@@ -13006,7 +13068,16 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             end)
                         end
 
-                        local applied = apply_morph_items(char, items, "user:" .. target)
+                        local referenceModel, buildErr = build_reference_model(items)
+                        local referenceOffsets = nil
+                        if referenceModel then
+                            referenceOffsets = harvest_reference_offsets(referenceModel)
+                            pcall(function() referenceModel:Destroy() end)
+                        else
+                            print("[MORPH] no reference model (" .. tostring(buildErr) .. "), falling back to heuristic offsets")
+                        end
+
+                        local applied = apply_morph_items(char, items, "user:" .. target, referenceOffsets)
                         if applied > 0 then
                             library:Notify(string.format("Morph: applied %d parts from %s (visual only, local)", applied, target), 4)
                         else
@@ -13066,7 +13137,17 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         end
 
                         snapshot_body_colors(char)
-                        local applied = apply_morph_items(char, items, "bundle:" .. tostring(data.name))
+
+                        local referenceModel, buildErr = build_reference_model(items)
+                        local referenceOffsets = nil
+                        if referenceModel then
+                            referenceOffsets = harvest_reference_offsets(referenceModel)
+                            pcall(function() referenceModel:Destroy() end)
+                        else
+                            print("[MORPH] no reference model (" .. tostring(buildErr) .. "), falling back to heuristic offsets")
+                        end
+
+                        local applied = apply_morph_items(char, items, "bundle:" .. tostring(data.name), referenceOffsets)
                         if applied > 0 then
                             library:Notify(string.format("Morph: applied %d parts from %s (visual only, local)", applied, tostring(data.name or bundleId)), 4)
                         else
@@ -27107,7 +27188,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 364 loaded - Character Morph: also fixed Torso's own C0 for all 6 joints (was still using tiny-R6-box math, fusing everything to it)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 365 loaded - Character Morph: now builds a real reference model via CreateHumanoidModelFromDescription and uses Roblox's own computed joint offsets", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
