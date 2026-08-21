@@ -12645,6 +12645,28 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             local function set_part_mesh(char, partName, meshId, textureId)
                 local part = char:FindFirstChild(partName)
                 if not (part and part:IsA("BasePart")) then return false end
+                print(string.format("[MORPH] %s is a %s", partName, part.ClassName))
+
+                -- If the rig's own body parts ARE MeshParts (common in stylized
+                -- games like this one), the part's own MeshId IS the visible shape -
+                -- a child SpecialMesh has no effect on a MeshPart at all, unlike a
+                -- classic Part.
+                if part:IsA("MeshPart") then
+                    if not morph_state.part_snapshots[part] then
+                        morph_state.part_snapshots[part] = {
+                            isMeshPart = true,
+                            meshId = part.MeshId,
+                            textureId = part.TextureID,
+                        }
+                    end
+                    local setok, seterr = pcall(function()
+                        part.MeshId = meshId
+                        if textureId and textureId ~= "" then
+                            part.TextureID = textureId
+                        end
+                    end)
+                    return setok, seterr
+                end
 
                 local sm = part:FindFirstChildOfClass("SpecialMesh")
                 local created = false
@@ -12656,6 +12678,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                 if not morph_state.part_snapshots[part] then
                     morph_state.part_snapshots[part] = {
+                        isMeshPart = false,
                         created = created,
                         meshId = created and "" or sm.MeshId,
                         textureId = created and "" or sm.TextureId,
@@ -12881,15 +12904,22 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
 
                         for part, snap in pairs(morph_state.part_snapshots) do
                             if part and part.Parent then
-                                local sm = part:FindFirstChildOfClass("SpecialMesh")
-                                if snap.created then
-                                    if sm then pcall(function() sm:Destroy() end) end
-                                elseif sm then
+                                if snap.isMeshPart then
                                     pcall(function()
-                                        sm.MeshId = snap.meshId
-                                        sm.TextureId = snap.textureId
-                                        sm.MeshType = snap.meshType
+                                        part.MeshId = snap.meshId
+                                        part.TextureID = snap.textureId
                                     end)
+                                else
+                                    local sm = part:FindFirstChildOfClass("SpecialMesh")
+                                    if snap.created then
+                                        if sm then pcall(function() sm:Destroy() end) end
+                                    elseif sm then
+                                        pcall(function()
+                                            sm.MeshId = snap.meshId
+                                            sm.TextureId = snap.textureId
+                                            sm.MeshType = snap.meshType
+                                        end)
+                                    end
                                 end
                             end
                         end
@@ -26826,7 +26856,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 350 loaded - Character Morph: fixed mesh content IDs (was assigning unresolvable CDN URLs instead of rbxassetid://)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 351 loaded - Character Morph: now handles MeshPart-based rigs (sets MeshId directly on the part, not a child SpecialMesh)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
