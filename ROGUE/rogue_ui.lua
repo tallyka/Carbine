@@ -12604,16 +12604,34 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 return nil
             end
 
+            -- Reading a MeshPart's MeshId/TextureID back as a string gives Roblox's
+            -- resolved CDN form ("https://assetdelivery.roblox.com/v1/asset/?id=...",
+            -- confirmed live) instead of "rbxassetid://<id>" - and SpecialMesh.MeshId
+            -- silently accepts that string (no error) but never actually resolves it,
+            -- so the mesh renders as blank/default geometry. Always rebuild a clean
+            -- "rbxassetid://<id>" from whatever numeric id is embedded in the string.
+            local function normalize_content_id(s)
+                if not s or s == "" then return nil end
+                local id = s:match("[?&]id=(%d+)") or s:match("rbxassetid://(%d+)") or s:match("(%d+)$")
+                return id and ("rbxassetid://" .. id) or nil
+            end
+
             local function extract_mesh_and_texture(objs)
                 local meshPart = find_of_class(objs, {"MeshPart"})
-                if meshPart and tostring(meshPart.MeshId) ~= "" then
-                    local texId = ""
-                    pcall(function() texId = tostring(meshPart.TextureID) end)
-                    return tostring(meshPart.MeshId), texId
+                if meshPart then
+                    local meshId = normalize_content_id(tostring(meshPart.MeshId))
+                    if meshId then
+                        local rawTex = ""
+                        pcall(function() rawTex = tostring(meshPart.TextureID) end)
+                        return meshId, normalize_content_id(rawTex) or ""
+                    end
                 end
                 local specialMesh = find_of_class(objs, {"SpecialMesh", "FileMesh"})
-                if specialMesh and tostring(specialMesh.MeshId) ~= "" then
-                    return tostring(specialMesh.MeshId), tostring(specialMesh.TextureId)
+                if specialMesh then
+                    local meshId = normalize_content_id(tostring(specialMesh.MeshId))
+                    if meshId then
+                        return meshId, normalize_content_id(tostring(specialMesh.TextureId)) or ""
+                    end
                 end
                 local charMesh = find_of_class(objs, {"CharacterMesh"})
                 if charMesh and charMesh.MeshId and charMesh.MeshId ~= 0 then
@@ -26808,7 +26826,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 349 loaded - Character Morph: body parts now copy MeshPart mesh/texture directly onto your own parts (modern bundles aren't CharacterMesh-based)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 350 loaded - Character Morph: fixed mesh content IDs (was assigning unresolvable CDN URLs instead of rbxassetid://)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
