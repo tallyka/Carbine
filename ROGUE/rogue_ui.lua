@@ -12692,6 +12692,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if textureId and textureId ~= "" then
                         sm.TextureId = textureId
                     end
+                    print(string.format("[MORPH] %s immediate readback: Parent=%s MeshId=%s MeshType=%s",
+                        partName, tostring(sm.Parent), tostring(sm.MeshId), tostring(sm.MeshType)))
+                    task.spawn(function()
+                        task.wait(1)
+                        print(string.format("[MORPH] %s recheck after 1s: Parent=%s MeshId=%s stillExists=%s",
+                            partName, tostring(sm.Parent), tostring(sm.MeshId), tostring(sm.Parent ~= nil)))
+                    end)
                 end)
                 return setok, seterr
             end
@@ -26856,7 +26863,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 351 loaded - Character Morph: now handles MeshPart-based rigs (sets MeshId directly on the part, not a child SpecialMesh)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 352 loaded - Character Morph: added immediate + 1s-delayed readback prints to check if the game strips added SpecialMesh instances", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
