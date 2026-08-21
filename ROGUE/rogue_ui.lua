@@ -12721,7 +12721,6 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 local newPart = Instance.new("MeshPart")
                 local ok, err = pcall(function()
                     newPart.Name = partName
-                    newPart.Size = part.Size
                     newPart.CFrame = part.CFrame
                     newPart.Anchored = false
                     newPart.Massless = true
@@ -12732,12 +12731,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if textureId and textureId ~= "" then
                         newPart.TextureID = textureId
                     end
-                    -- Forcing Size back down to the tiny R6 box after MeshId
-                    -- squashes/degenerates the mesh until it's effectively invisible
-                    -- (confirmed live - looked like nothing changed at all). Letting
-                    -- it keep the mesh's own native size renders an oversized but
-                    -- actually visible/correct-shaped character, which is what we
-                    -- actually want here (purely cosmetic, size doesn't matter).
+                    -- Deliberately NOT setting Size at all - confirmed live that
+                    -- explicitly assigning it (even before MeshId) makes it STICK at
+                    -- that value instead of getting recomputed from the mesh's real
+                    -- dimensions once MeshId loads (the edge-offset math downstream
+                    -- was measuring the fake tiny R6 size this whole time because of
+                    -- that). Leaving it untouched lets Roblox compute the part's
+                    -- actual native bounding box from the mesh itself.
                     newPart.CFrame = part.CFrame
                 end)
                 if not ok then
@@ -27071,7 +27071,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 361 loaded - Character Morph: fixed edge-offset multiplication order (was applying it along rotated axes instead of plain local axes)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 362 loaded - Character Morph: stopped force-setting Size at all (confirmed it was stuck at the tiny R6 size this whole time, not the real mesh size)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
