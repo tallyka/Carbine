@@ -12633,6 +12633,13 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             -- meaning TextureID was empty). Grab it too so it can be cloned onto
             -- our new part; SurfaceAppearance just needs to be parented under a
             -- MeshPart to apply, no property extraction needed.
+            -- The SOURCE MeshPart loaded via game:GetObjects carries its own
+            -- authored Size as static serialized data - confirmed live to be
+            -- reliable, unlike reading .Size back off a freshly-created
+            -- Instance.new("MeshPart") after assigning MeshId (that came back as
+            -- the exact same placeholder value for every single part regardless
+            -- of which mesh was assigned, i.e. not real). Grab it here and use it
+            -- everywhere downstream instead.
             local function extract_mesh_and_texture(objs)
                 local meshPart = find_of_class(objs, {"MeshPart"})
                 if meshPart then
@@ -12641,23 +12648,23 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         local rawTex = ""
                         pcall(function() rawTex = tostring(meshPart.TextureID) end)
                         local surfaceAppearance = meshPart:FindFirstChildOfClass("SurfaceAppearance")
-                        return meshId, normalize_content_id(rawTex) or "", surfaceAppearance
+                        return meshId, normalize_content_id(rawTex) or "", surfaceAppearance, meshPart.Size
                     end
                 end
                 local specialMesh = find_of_class(objs, {"SpecialMesh", "FileMesh"})
                 if specialMesh then
                     local meshId = normalize_content_id(tostring(specialMesh.MeshId))
                     if meshId then
-                        return meshId, normalize_content_id(tostring(specialMesh.TextureId)) or "", nil
+                        return meshId, normalize_content_id(tostring(specialMesh.TextureId)) or "", nil, nil
                     end
                 end
                 local charMesh = find_of_class(objs, {"CharacterMesh"})
                 if charMesh and charMesh.MeshId and charMesh.MeshId ~= 0 then
                     local texId = (charMesh.BaseTextureId and charMesh.BaseTextureId ~= 0)
                         and ("rbxassetid://" .. tostring(charMesh.BaseTextureId)) or ""
-                    return "rbxassetid://" .. tostring(charMesh.MeshId), texId, nil
+                    return "rbxassetid://" .. tostring(charMesh.MeshId), texId, nil, nil
                 end
-                return nil, nil, nil
+                return nil, nil, nil, nil
             end
 
             local function apply_surface_appearance(targetPart, surfaceAppearance)
@@ -12670,7 +12677,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 end)
             end
 
-            local function set_part_mesh(char, partName, meshId, textureId, surfaceAppearance)
+            local function set_part_mesh(char, partName, meshId, textureId, surfaceAppearance, realSize)
                 local part = char:FindFirstChild(partName)
                 if not (part and part:IsA("BasePart")) then return false end
                 print(string.format("[MORPH] %s is a %s", partName, part.ClassName))
@@ -12713,6 +12720,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         if textureId and textureId ~= "" then
                             already.newPart.TextureID = textureId
                         end
+                        if realSize then
+                            already.newPart.Size = realSize
+                        end
                     end)
                     apply_surface_appearance(already.newPart, surfaceAppearance)
                     return setok, seterr
@@ -12731,13 +12741,14 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if textureId and textureId ~= "" then
                         newPart.TextureID = textureId
                     end
-                    -- Deliberately NOT setting Size at all - confirmed live that
-                    -- explicitly assigning it (even before MeshId) makes it STICK at
-                    -- that value instead of getting recomputed from the mesh's real
-                    -- dimensions once MeshId loads (the edge-offset math downstream
-                    -- was measuring the fake tiny R6 size this whole time because of
-                    -- that). Leaving it untouched lets Roblox compute the part's
-                    -- actual native bounding box from the mesh itself.
+                    -- realSize comes from the SOURCE MeshPart's own authored Size
+                    -- (extracted via game:GetObjects, confirmed reliable) - not the
+                    -- tiny R6 part's size, and not read back off this new Instance
+                    -- (confirmed unreliable, gave the same placeholder for every
+                    -- part). Set it explicitly now that we actually trust the value.
+                    if realSize then
+                        newPart.Size = realSize
+                    end
                     newPart.CFrame = part.CFrame
                 end)
                 if not ok then
@@ -12779,15 +12790,18 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 -- separation at all - both consistent with the mesh's local origin
                 -- actually being near its OWN geometric center, same as the old tiny
                 -- R6 part, just scaled up. So instead of centering the joint, put it
-                -- at the correct EDGE of the new part's real (measured) bounding box
-                -- - bottom of the head, top of arms/legs - using newPart.Size, which
-                -- reflects this specific mesh's true dimensions. Manual offset below
-                -- still layers on top for whatever this heuristic doesn't nail.
+                -- at the correct EDGE of the new part's real bounding box - bottom of
+                -- the head, top of arms/legs. Using realSize (the SOURCE MeshPart's
+                -- own authored Size, extracted straight from game:GetObjects) instead
+                -- of newPart.Size - confirmed live that reading Size back off our own
+                -- freshly-created Instance gave the exact same placeholder value for
+                -- every single part regardless of mesh, i.e. it wasn't real data.
                 local strip_c1_position = partName ~= "Torso"
                 local edgeDir = JOINT_EDGE_DIRECTION[partName]
-                local edgeOffset = edgeDir and CFrame.new(0, edgeDir * (newPart.Size.Y / 2), 0) or CFrame.new()
-                print(string.format("[MORPH] %s measured Size=%s edgeDir=%s edgeOffsetY=%s",
-                    partName, tostring(newPart.Size), tostring(edgeDir), tostring(edgeOffset.Y)))
+                local sizeY = realSize and realSize.Y or newPart.Size.Y
+                local edgeOffset = edgeDir and CFrame.new(0, edgeDir * (sizeY / 2), 0) or CFrame.new()
+                print(string.format("[MORPH] %s realSize=%s edgeDir=%s edgeOffsetY=%s",
+                    partName, tostring(realSize), tostring(edgeDir), tostring(edgeOffset.Y)))
                 local o = morph_state.part_offsets[partName]
                 local manualOffset = o and (CFrame.new(o.x, o.y, o.z) * CFrame.Angles(math.rad(o.rx), math.rad(o.ry), math.rad(o.rz))) or CFrame.new()
                 for _, m in ipairs(motors) do
@@ -12837,9 +12851,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     if partName then
                         local ok, objs = pcall(function() return game:GetObjects("rbxassetid://" .. item.id) end)
                         if ok and objs and #objs > 0 then
-                            local meshId, texId, surfaceAppearance = extract_mesh_and_texture(objs)
+                            local meshId, texId, surfaceAppearance, realSize = extract_mesh_and_texture(objs)
                             if meshId then
-                                local setok, seterr = set_part_mesh(char, partName, meshId, texId, surfaceAppearance)
+                                local setok, seterr = set_part_mesh(char, partName, meshId, texId, surfaceAppearance, realSize)
                                 if setok then
                                     applied = applied + 1
                                     print(string.format("[MORPH] %s %s <- asset %d (mesh %s)", label, partName, item.id, meshId))
@@ -27071,7 +27085,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 362 loaded - Character Morph: stopped force-setting Size at all (confirmed it was stuck at the tiny R6 size this whole time, not the real mesh size)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 363 loaded - Character Morph: read the real mesh Size from the SOURCE asset instead of the unreliable freshly-created part, should auto-align now", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
