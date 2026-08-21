@@ -12767,14 +12767,15 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 -- R6 (Neck/Shoulder/Hip). R6's C1 was calibrated assuming that part's
                 -- local origin is its geometric center - but these modern meshes are
                 -- rigged with their local origin AT the joint/attachment point itself
-                -- (confirmed live: head/legs rendered sunk into the torso, exactly the
-                -- symptom of double-applying that offset). Zeroing C1 for those parts
-                -- treats the new mesh's own origin as the joint, matching how it was
-                -- actually authored. Not touched for Torso, since its C0 side (the
-                -- parent reference for all 6 of its joints) wasn't reported broken and
-                -- adjusting it blind risks making something that already looks right
-                -- worse.
-                local zero_c1 = partName ~= "Torso"
+                -- (confirmed live: head/legs rendered sunk into the torso). Zeroing
+                -- C1 entirely also wiped its ROTATION, not just position - confirmed
+                -- live to rotate the head wrong. Strip only the position component
+                -- (C1 - C1.Position keeps the rotation, zeroes the translation), so
+                -- the new mesh's own origin is treated as the joint but orientation
+                -- is preserved. Not touched for Torso - its C0 side wasn't reported
+                -- broken and adjusting it blind risks breaking something that
+                -- already looks right.
+                local strip_c1_position = partName ~= "Torso"
                 for _, m in ipairs(motors) do
                     pcall(function()
                         if not m.origC1 then m.origC1 = m.motor.C1 end
@@ -12782,7 +12783,9 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                             m.motor.Part0 = newPart
                         else
                             m.motor.Part1 = newPart
-                            if zero_c1 then m.motor.C1 = CFrame.new() end
+                            if strip_c1_position then
+                                m.motor.C1 = m.origC1 - m.origC1.Position
+                            end
                         end
                     end)
                 end
@@ -26979,7 +26982,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 357 loaded - Character Morph: fixed Head/Arms/Legs sinking into torso (zeroed joint C1, was double-offsetting against the mesh's own origin)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 358 loaded - Character Morph: joint fix now strips only C1 position, keeps rotation (zeroing C1 entirely rotated the head wrong)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
