@@ -12585,7 +12585,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 [30] = "Left Leg", [31] = "Right Leg",
             }
 
-            local morph_state = { part_snapshots = {}, swapped_parts = {}, accessories = {}, original_colors = nil }
+            local morph_state = { part_snapshots = {}, swapped_parts = {}, accessories = {}, original_colors = nil, part_offsets = {} }
 
             local function find_of_class(objs, classNames)
                 for _, obj in ipairs(objs) do
@@ -12763,19 +12763,18 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     pcall(function() child.Parent = newPart end)
                 end
 
-                -- Head/Arms/Legs are always the CHILD (Part1) side of their joint in
-                -- R6 (Neck/Shoulder/Hip). R6's C1 was calibrated assuming that part's
-                -- local origin is its geometric center - but these modern meshes are
-                -- rigged with their local origin AT the joint/attachment point itself
-                -- (confirmed live: head/legs rendered sunk into the torso). Zeroing
-                -- C1 entirely also wiped its ROTATION, not just position - confirmed
-                -- live to rotate the head wrong. Strip only the position component
-                -- (C1 - C1.Position keeps the rotation, zeroes the translation), so
-                -- the new mesh's own origin is treated as the joint but orientation
-                -- is preserved. Not touched for Torso - its C0 side wasn't reported
-                -- broken and adjusting it blind risks breaking something that
-                -- already looks right.
+                -- No single formula reliably aligns an arbitrary catalog mesh never
+                -- authored for R6 (confirmed live across 3 different attempts: sunk
+                -- in, rotated wrong, fully collapsed together - every mesh apparently
+                -- has its own different internal pivot). So this now just picks a
+                -- reasonable starting point (strip C1's position, keep its rotation)
+                -- and exposes a manual per-part offset (position + rotation) below
+                -- that gets layered on top and can be live-tuned until it looks
+                -- right - baseC1 is stored per motor so the tuning UI can recompute
+                -- C1 = baseC1 * offset any time without needing the original C1 again.
                 local strip_c1_position = partName ~= "Torso"
+                local o = morph_state.part_offsets[partName]
+                local offset = o and (CFrame.new(o.x, o.y, o.z) * CFrame.Angles(math.rad(o.rx), math.rad(o.ry), math.rad(o.rz))) or CFrame.new()
                 for _, m in ipairs(motors) do
                     pcall(function()
                         if not m.origC1 then m.origC1 = m.motor.C1 end
@@ -12784,7 +12783,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         else
                             m.motor.Part1 = newPart
                             if strip_c1_position then
-                                m.motor.C1 = m.origC1 - m.origC1.Position
+                                m.baseC1 = m.origC1 - m.origC1.Position
+                                m.motor.C1 = m.baseC1 * offset
                             end
                         end
                     end)
@@ -12851,6 +12851,18 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     end
                 end
                 return applied
+            end
+
+            local function apply_part_offset(partName)
+                local info = morph_state.swapped_parts[partName]
+                if not info then return end
+                local o = morph_state.part_offsets[partName]
+                local offset = o and (CFrame.new(o.x, o.y, o.z) * CFrame.Angles(math.rad(o.rx), math.rad(o.ry), math.rad(o.rz))) or CFrame.new()
+                for _, m in ipairs(info.motors) do
+                    if m.slot == "Part1" and m.baseC1 then
+                        pcall(function() m.motor.C1 = m.baseC1 * offset end)
+                    end
+                end
             end
 
             local function snapshot_body_colors(char)
@@ -13006,6 +13018,61 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     end)
                 end
             })
+
+            group_morph:AddDivider()
+
+            group_morph:AddDropdown("MorphAdjustPart", {
+                Text = "Fine-Tune Part",
+                Values = {"Head", "Torso", "Left Arm", "Right Arm", "Left Leg", "Right Leg"},
+                Default = "Head",
+                Multi = false,
+                Callback = function(v)
+                    local o = morph_state.part_offsets[v] or { x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0 }
+                    pcall(function()
+                        if Options.MorphOffsetX then Options.MorphOffsetX:SetValue(o.x) end
+                        if Options.MorphOffsetY then Options.MorphOffsetY:SetValue(o.y) end
+                        if Options.MorphOffsetZ then Options.MorphOffsetZ:SetValue(o.z) end
+                        if Options.MorphRotX then Options.MorphRotX:SetValue(o.rx) end
+                        if Options.MorphRotY then Options.MorphRotY:SetValue(o.ry) end
+                        if Options.MorphRotZ then Options.MorphRotZ:SetValue(o.rz) end
+                    end)
+                end
+            })
+
+            local function on_offset_slider_changed(field, value)
+                local partName = Options.MorphAdjustPart and Options.MorphAdjustPart.Value
+                if not partName then return end
+                morph_state.part_offsets[partName] = morph_state.part_offsets[partName] or { x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0 }
+                morph_state.part_offsets[partName][field] = value
+                apply_part_offset(partName)
+            end
+
+            group_morph:AddSlider("MorphOffsetX", {
+                Text = "Offset X", Default = 0, Min = -5, Max = 5, Rounding = 2,
+                Callback = function(v) on_offset_slider_changed("x", v) end
+            })
+            group_morph:AddSlider("MorphOffsetY", {
+                Text = "Offset Y", Default = 0, Min = -5, Max = 5, Rounding = 2,
+                Callback = function(v) on_offset_slider_changed("y", v) end
+            })
+            group_morph:AddSlider("MorphOffsetZ", {
+                Text = "Offset Z", Default = 0, Min = -5, Max = 5, Rounding = 2,
+                Callback = function(v) on_offset_slider_changed("z", v) end
+            })
+            group_morph:AddSlider("MorphRotX", {
+                Text = "Rotate X", Default = 0, Min = -180, Max = 180, Rounding = 0,
+                Callback = function(v) on_offset_slider_changed("rx", v) end
+            })
+            group_morph:AddSlider("MorphRotY", {
+                Text = "Rotate Y", Default = 0, Min = -180, Max = 180, Rounding = 0,
+                Callback = function(v) on_offset_slider_changed("ry", v) end
+            })
+            group_morph:AddSlider("MorphRotZ", {
+                Text = "Rotate Z", Default = 0, Min = -180, Max = 180, Rounding = 0,
+                Callback = function(v) on_offset_slider_changed("rz", v) end
+            })
+
+            group_morph:AddDivider()
 
             group_morph:AddButton({
                 Text = "Reset My Own Appearance",
@@ -26982,7 +27049,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 358 loaded - Character Morph: joint fix now strips only C1 position, keeps rotation (zeroing C1 entirely rotated the head wrong)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 359 loaded - Character Morph: added manual Fine-Tune Part offset/rotation sliders since no formula reliably aligns arbitrary meshes", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
