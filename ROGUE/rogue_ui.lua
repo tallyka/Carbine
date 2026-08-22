@@ -7998,6 +7998,112 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             local group_ingredient_esp = Tabs.Visuals:AddRightGroupbox("Ingredient ESP")
             local group_ore_esp = Tabs.Visuals:AddLeftGroupbox("Ore ESP")
 
+            -- Wrapped in its own pcall(function()...end) closure so its locals get
+            -- a fresh register scope instead of adding to this file's shared
+            -- 200-local-per-function ceiling (see BUILD 219/229-236's history).
+            pcall(function()
+                local group_proximity = Tabs.Visuals:AddRightGroupbox("Proximity Notifier")
+
+                local proximity_gui = Instance.new("ScreenGui")
+                proximity_gui.Name = "CarbineProximityNotifier"
+                proximity_gui.ResetOnSpawn = false
+                proximity_gui.IgnoreGuiInset = true
+                proximity_gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+                pcall(function() proximity_gui.Parent = game:GetService("CoreGui") end)
+                if not proximity_gui.Parent then
+                    proximity_gui.Parent = plr:WaitForChild("PlayerGui")
+                end
+
+                local proximity_label = Instance.new("TextLabel")
+                proximity_label.Name = "ProximityLabel"
+                proximity_label.AnchorPoint = Vector2.new(0.5, 0)
+                proximity_label.Position = UDim2.new(0.5, 0, 0, 10)
+                proximity_label.Size = UDim2.new(0, 360, 0, 34)
+                proximity_label.AutomaticSize = Enum.AutomaticSize.X
+                proximity_label.BackgroundColor3 = Color3.fromRGB(20, 45, 50)
+                proximity_label.BackgroundTransparency = 0.1
+                proximity_label.BorderSizePixel = 0
+                proximity_label.TextColor3 = Color3.fromRGB(255, 255, 255)
+                proximity_label.Font = Enum.Font.GothamBold
+                proximity_label.TextSize = 16
+                proximity_label.TextXAlignment = Enum.TextXAlignment.Center
+                proximity_label.Text = ""
+                proximity_label.Visible = false
+                proximity_label.Parent = proximity_gui
+
+                local proximity_padding = Instance.new("UIPadding")
+                proximity_padding.PaddingLeft = UDim.new(0, 16)
+                proximity_padding.PaddingRight = UDim.new(0, 16)
+                proximity_padding.Parent = proximity_label
+
+                local proximity_corner = Instance.new("UICorner")
+                proximity_corner.CornerRadius = UDim.new(0, 6)
+                proximity_corner.Parent = proximity_label
+
+                group_proximity:AddToggle("ProximityNotifierEnabled", {
+                    Text = "Enable Proximity Notifier",
+                    Default = false,
+                })
+                group_proximity:AddSlider("ProximityRange", {
+                    Text = "Range", Default = 150, Min = 10, Max = 1000, Rounding = 0, Suffix = " studs",
+                })
+
+                -- Reuses the FirstName/LastName character-name attributes this game
+                -- already replicates to every client (same source the stock
+                -- leaderboard GUI reads from) rather than the raw Roblox username,
+                -- so the notifier reads like the reference screenshot ("Fukari Adk
+                -- (64zvh)" - in-game name, then the real username in parens).
+                local function proximity_display_name(player)
+                    local ok, fn = pcall(function() return player:GetAttribute("FirstName") end)
+                    if ok and fn and fn ~= "" and fn ~= "nil" then
+                        local ln = player:GetAttribute("LastName")
+                        if ln and ln ~= "" then
+                            return fn .. " " .. ln
+                        end
+                        return fn
+                    end
+                    return (player.DisplayName ~= "" and player.DisplayName) or player.Name
+                end
+
+                task.spawn(function()
+                    while shared and not shared.is_unloading do
+                        task.wait(0.25)
+                        local enabled = Toggles.ProximityNotifierEnabled and Toggles.ProximityNotifierEnabled.Value
+                        if not enabled then
+                            proximity_label.Visible = false
+                        else
+                            local myChar = plr.Character
+                            local myRoot = myChar and FindFirstChild(myChar, "HumanoidRootPart")
+                            local range = (Options.ProximityRange and Options.ProximityRange.Value) or 150
+                            local closestPlayer, closestDist = nil, math.huge
+                            if myRoot then
+                                for _, other in ipairs(game.Players:GetPlayers()) do
+                                    if other ~= plr then
+                                        local oChar = other.Character
+                                        local oRoot = oChar and FindFirstChild(oChar, "HumanoidRootPart")
+                                        if oRoot then
+                                            local dist = (oRoot.Position - myRoot.Position).Magnitude
+                                            if dist <= range and dist < closestDist then
+                                                closestDist = dist
+                                                closestPlayer = other
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                            if closestPlayer then
+                                proximity_label.Text = string.format("%s (%s) is nearby! [%d]",
+                                    proximity_display_name(closestPlayer), closestPlayer.Name, math.floor(closestDist))
+                                proximity_label.Visible = true
+                            else
+                                proximity_label.Visible = false
+                            end
+                        end
+                    end
+                    pcall(function() proximity_gui:Destroy() end)
+                end)
+            end)
+
             do
                 group_misc_esp:AddToggle("TrinketEsp", {
                     Text = "Trinket ESP",
@@ -27212,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 369 loaded - fixed Self Fall Damage hook silently eating real fall-damage calls on any calibration error (unprotected pcall)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 370 loaded - added Proximity Notifier (Visuals tab): top-center banner showing the closest nearby player and distance", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
