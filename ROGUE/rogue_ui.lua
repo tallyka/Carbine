@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 371 loaded - Blademaster's baked 'Ultra Sigil (Gaia)' preset now uses your sigilnew.json content, 'Uber Sigil (Khei)' unchanged", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 372 loaded - added Cast Spell waypoint (Path tab): pick a spell, it charges mana and casts it, then holds for the point's Wait Time", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -28336,6 +28336,8 @@ end
                             color = Color3.fromRGB(255, 80, 80); label = string.format("%d ATK", i)
                         elseif step.kind == "mana_attack" then
                             color = Color3.fromRGB(150, 100, 255); label = string.format("%d MANA-ATK", i)
+                        elseif step.kind == "spell_cast" then
+                            color = Color3.fromRGB(100, 180, 255); label = string.format("%d %s", i, step.spell_name or "SPELL")
                         elseif step.kind == "shrieker" then
                             color = Color3.fromRGB(190, 90, 255); label = string.format("%d SHRK", i)
                         elseif step.kind == "sealed" then
@@ -29044,7 +29046,7 @@ end
             end)
             group_travel = group_path   -- Path sub-tab
             group_travel:AddDropdown("xpfarm_wp_action", {
-                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Teleport Menu", "Reset If Safe" },
+                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Cast Spell", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Teleport Menu", "Reset If Safe" },
                 Default = 1, Multi = false, Text = "Waypoint Action",
                 Tooltip = "What the 'Add Waypoint' button below creates",
                 Callback = function(v) selected_action = v end
@@ -29077,6 +29079,17 @@ end
                 Numeric = true,
                 Placeholder = "how many to craft (0 = until out of materials)"
             })
+            pcall(function()
+                local spell_names = {}
+                for nm in pairs(cheat_client.spell_cost) do table.insert(spell_names, nm) end
+                table.sort(spell_names)
+                group_travel:AddDropdown("xpfarm_spell_name", {
+                    Values = spell_names,
+                    Default = spell_names[1],
+                    Multi = false, Text = "Spell to Cast",
+                    Tooltip = "Which spell a 'Cast Spell' waypoint charges mana for and casts. Charges to that spell's known cost, equips it, casts once, then holds for the waypoint's own Wait Time.",
+                })
+            end)
             group_travel:AddInput("xpfarm_weapon_delay", {
                 Text = "Weapon Craft Delay (s)",
                 Default = "1",
@@ -29386,6 +29399,7 @@ end
                     elseif selected_action == "CR Captcha" then kind = "npc_captcha"
                     elseif selected_action == "Attack Here" then kind = "attack"
                     elseif selected_action == "Charge Mana + Attack" then kind = "mana_attack"
+                    elseif selected_action == "Cast Spell" then kind = "spell_cast"
                     elseif selected_action == "Shrieker Grab" then kind = "shrieker"
                     elseif selected_action == "Sealed Shrieker Grip" then kind = "sealed"
                     elseif selected_action == "Mine Here" then kind = "mine"
@@ -29396,7 +29410,9 @@ end
                     elseif selected_action == "Hold Point" then kind = "hold"
                     elseif selected_action == "Charge Mana" then kind = "mana" end
                     local step = { kind = kind, cf = hrp.CFrame, wait_time = wt }
-                    if kind == "potion" then
+                    if kind == "spell_cast" then
+                        step.spell_name = (Options.xpfarm_spell_name and Options.xpfarm_spell_name.Value) or ""
+                    elseif kind == "potion" then
                         step.potion = (Options.xpfarm_potion and Options.xpfarm_potion.Value) or "Health Potion"
                         step.count = math.max(0, math.floor(tonumber(Options.xpfarm_potion_count and Options.xpfarm_potion_count.Value) or 0))
                         step.delay = math.max(0, tonumber(Options.xpfarm_potion_delay and Options.xpfarm_potion_delay.Value) or 1)
@@ -29531,6 +29547,7 @@ end
                         if selected_action == "Talk to NPC" then kind = "npc"
                         elseif selected_action == "Attack Here" then kind = "attack"
                         elseif selected_action == "Charge Mana + Attack" then kind = "mana_attack"
+                        elseif selected_action == "Cast Spell" then kind = "spell_cast"
                         elseif selected_action == "Shrieker Grab" then kind = "shrieker"
                         elseif selected_action == "Sealed Shrieker Grip" then kind = "sealed"
                         elseif selected_action == "Charge Mana" then kind = "mana" end
@@ -29541,6 +29558,8 @@ end
                             local nm = Options.xpfarm_npc_name and Options.xpfarm_npc_name.Value or ""
                             if nm ~= "" then ns.npc_name = nm end
                             if Options.xpfarm_npc_skip_armed and Options.xpfarm_npc_skip_armed.Value then ns.skip_if_armed = true end
+                        elseif kind == "spell_cast" then
+                            ns.spell_name = (Options.xpfarm_spell_name and Options.xpfarm_spell_name.Value) or ""
                         end
                         xp_path[n] = ns
                     end
@@ -34293,6 +34312,47 @@ end
                                             end)
                                         end
                                         task.wait(0.1)
+                                    end
+                                elseif step.kind == "spell_cast" then
+                                    -- Charges mana to the selected spell's known cost (same
+                                    -- lookup table SnapTrain's auto-caster uses), equips it,
+                                    -- casts once, unequips, then holds for however long this
+                                    -- waypoint's own Wait Time is set to.
+                                    local spell_name = step.spell_name
+                                    local spell_data = spell_name ~= "" and cheat_client.spell_cost[spell_name]
+                                    if spell_data then
+                                        local min_cost, max_cost = spell_data[1][1], spell_data[1][2]
+                                        local mid_cost = (min_cost + max_cost) / 2
+                                        library:Notify(string.format("Path: charging mana for %s...", spell_name), 3)
+                                        pcall(function() utility:charge_mana_until(mid_cost) end)
+
+                                        local char = plr.Character
+                                        local tool = FindFirstChild(plr.Backpack, spell_name) or (char and FindFirstChild(char, spell_name))
+                                        if tool and char then
+                                            pcall(function()
+                                                if tool.Parent == plr.Backpack then
+                                                    char.Humanoid:EquipTool(tool)
+                                                end
+                                            end)
+                                            task.wait(0.2)
+                                            pcall(function() utility:LeftClick() end)
+                                            library:Notify(string.format("Path: cast %s", spell_name), 3)
+                                            task.wait(0.3)
+                                            pcall(function() char.Humanoid:UnequipTools() end)
+                                        else
+                                            library:Notify(string.format("Path: don't have %s in bag, skipping cast", spell_name), 4)
+                                        end
+                                    else
+                                        library:Notify("Path: no spell selected for this waypoint", 4)
+                                    end
+
+                                    if wait_s and wait_s > 0 then
+                                        library:Notify(string.format("Path: waiting %ds", math.floor(wait_s)), 3)
+                                        local wt0 = os.clock()
+                                        while Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                                            and shared and not shared.is_unloading and (os.clock() - wt0) < wait_s do
+                                            task.wait(0.1)
+                                        end
                                     end
                                 elseif step.kind == "attack" then
                                     -- attack until the area is CLEARED (monsters die/vanish,
