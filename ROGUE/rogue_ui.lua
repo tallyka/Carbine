@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 372 loaded - added Cast Spell waypoint (Path tab): pick a spell, it charges mana and casts it, then holds for the point's Wait Time", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 373 loaded - fixed Cast Spell waypoint unequipping mid-cast and cancelling the spell (now waits for the Casting tag to clear first)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -34336,8 +34336,23 @@ end
                                             end)
                                             task.wait(0.2)
                                             pcall(function() utility:LeftClick() end)
-                                            library:Notify(string.format("Path: cast %s", spell_name), 3)
-                                            task.wait(0.3)
+                                            library:Notify(string.format("Path: casting %s...", spell_name), 3)
+
+                                            -- Unequipping while the cast is still in progress
+                                            -- (the "Casting" tag) cancels it outright - confirmed
+                                            -- live, was cutting casts short every time. Wait for
+                                            -- the tag to actually appear (cast started) then
+                                            -- clear (cast finished) before unequipping, instead
+                                            -- of guessing a fixed delay.
+                                            local cast_wait_t0 = os.clock()
+                                            repeat task.wait(0.05)
+                                            until cs:HasTag(char, "Casting") or (os.clock() - cast_wait_t0) > 2
+                                            if cs:HasTag(char, "Casting") then
+                                                local clear_t0 = os.clock()
+                                                repeat task.wait(0.1)
+                                                until not cs:HasTag(char, "Casting") or (os.clock() - clear_t0) > 10
+                                            end
+
                                             pcall(function() char.Humanoid:UnequipTools() end)
                                         else
                                             library:Notify(string.format("Path: don't have %s in bag, skipping cast", spell_name), 4)
