@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 376 loaded - fixed Cast Spell waypoint's spell_name being dropped on path save/load (whitelist was missing that field)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 377 loaded - path resume now prefers the exact last waypoint reached (persisted live) over nearest-point, unless 1200+ studs away", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -28597,11 +28597,29 @@ end
                 local hrp = local_hrp()
                 if not hrp then return end
 
-                local best_i, best_d = 1, math.huge
-                for i, step in ipairs(xp_path) do
-                    if step.cf then
-                        local d = (step.cf.Position - hrp.Position).Magnitude
-                        if d < best_d then best_d, best_i = d, i end
+                -- Prefer resuming exactly where the bot actually left off (the index
+                -- persisted continuously while walking) over a pure nearest-distance
+                -- search - a path that loops back near the same spot at a different
+                -- index can otherwise resume at the WRONG occurrence. Only trust it
+                -- if still reasonably close to it; if a serverhop dropped us
+                -- somewhere completely different (e.g. 1200+ studs away, a different
+                -- part of the map), fall back to nearest-point like before.
+                local best_i, best_d
+                local last_idx = tonumber(mem:GetItem("xpfarm_last_path_idx") or "")
+                if last_idx and xp_path[last_idx] and xp_path[last_idx].cf then
+                    local d = (xp_path[last_idx].cf.Position - hrp.Position).Magnitude
+                    if d <= 1200 then
+                        best_i, best_d = last_idx, d
+                    end
+                end
+
+                if not best_i then
+                    best_i, best_d = 1, math.huge
+                    for i, step in ipairs(xp_path) do
+                        if step.cf then
+                            local d = (step.cf.Position - hrp.Position).Magnitude
+                            if d < best_d then best_d, best_i = d, i end
+                        end
                     end
                 end
 
@@ -28609,6 +28627,7 @@ end
                     if shared and shared.is_unloading then return end
                     local step = xp_path[i]
                     path_idx = i
+                    pcall(function() mem:SetItem("xpfarm_last_path_idx", tostring(i)) end)
                     update_path_label()
                     if step.cf then
                         bot_move_to(step.cf.Position)
@@ -32703,6 +32722,12 @@ end
                         while i <= #xp_path do
                             if shared.is_unloading or not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value) or xpfarm_hopping then break end
                             path_idx = i
+                            -- Persisted continuously so a serverhop (illusionist,
+                            -- emergency, anything) can resume exactly where the bot
+                            -- actually left off instead of a pure nearest-distance
+                            -- search, which can pick the wrong occurrence in a path
+                            -- that loops back near the same spot at a different index.
+                            pcall(function() mem:SetItem("xpfarm_last_path_idx", tostring(i)) end)
                             update_path_label()
 
                             local step = xp_path[i]
