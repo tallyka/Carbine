@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 375 loaded - Make Potions dropdowns now list all 18 known potion recipes, not just 8", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 376 loaded - fixed Cast Spell waypoint's spell_name being dropped on path save/load (whitelist was missing that field)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -28448,6 +28448,7 @@ end
                         if step.npc_name then e.npc_name = step.npc_name end
                         if step.skip_if_armed then e.skip_if_armed = true end
                         if step.choice_sequence then e.choice_sequence = step.choice_sequence end
+                        if step.spell_name then e.spell_name = step.spell_name end
                         table.insert(steps, e)
                     end
                 end
@@ -28544,6 +28545,7 @@ end
                         if step.npc_name then e.npc_name = step.npc_name end
                         if step.choice_sequence then e.choice_sequence = step.choice_sequence end
                         if step.skip_if_armed then e.skip_if_armed = true end
+                        if step.spell_name then e.spell_name = step.spell_name end
                         table.insert(xp_path, e)
                     end
                 end
