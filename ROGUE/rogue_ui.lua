@@ -9473,7 +9473,7 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             do
                 group_automation:AddDropdown("potions", {
                     Text = "Potions",
-                    Values = {"Health Potion", "Tespian Elixir", "Feather Feet", "Fire Protection", "Kingsbane", "Lordsbane", "Silver Sun", "Switch Witch", "Liquid Wisdom", "Ice Protection"},
+                    Values = {"Health Potion", "Bone Growth", "Switch Witch", "Silver Sun", "Lordsbane", "Liquid Wisdom", "Ice Protection", "Kingsbane", "Feather Feet", "Fire Protection", "Tespian Elixir", "Slateskin", "Mind Mend", "Clot Control", "Maidensbane", "Sooth Sight", "Crystal Extract", "Soothing Frost"},
                     Default = "Health Potion",
                     Callback = function(value)
                     end
@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 374 loaded - added Liquid Wisdom and Ice Protection to the Make Potions dropdowns (recipes already existed, just weren't selectable)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 375 loaded - Make Potions dropdowns now list all 18 known potion recipes, not just 8", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -29052,7 +29052,7 @@ end
                 Callback = function(v) selected_action = v end
             })
             group_travel:AddDropdown("xpfarm_potion", {
-                Values = { "Health Potion", "Tespian Elixir", "Feather Feet", "Fire Protection", "Kingsbane", "Lordsbane", "Silver Sun", "Switch Witch", "Liquid Wisdom", "Ice Protection" },
+                Values = { "Health Potion", "Bone Growth", "Switch Witch", "Silver Sun", "Lordsbane", "Liquid Wisdom", "Ice Protection", "Kingsbane", "Feather Feet", "Fire Protection", "Tespian Elixir", "Slateskin", "Mind Mend", "Clot Control", "Maidensbane", "Sooth Sight", "Crystal Extract", "Soothing Frost" },
                 Default = 1, Multi = false, Text = "Potion to Craft",
                 Tooltip = "Which potion a 'Make Potions' waypoint crafts (captured when you add that waypoint - stand at the cauldron).",
             })
