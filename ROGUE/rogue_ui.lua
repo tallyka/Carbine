@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 378 loaded - added Observe to the Target Class dropdown", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 379 loaded - added 'monster' repeat goal kind: a loop can now require N real kills of a named monster instead of a fixed round count", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -28197,6 +28197,16 @@ end
                 kill_counted[m] = true
                 kills = kills + 1
                 pcall(function() mem:SetItem("xpfarm_kills", tostring(kills)) end)
+                -- Per-monster-name running total (unconditional, works in any generic
+                -- path, not gated behind classbot_full like the Evil-Eye tally below) -
+                -- backs the "monster" repeat goal kind, e.g. "kill 20 Zombie Scroom".
+                pcall(function()
+                    local nm = m.Name
+                    if nm and nm ~= "" then
+                        local k = "xpfarm_mkill_" .. nm
+                        mem:SetItem(k, tostring((tonumber(mem:GetItem(k)) or 0) + 1))
+                    end
+                end)
                 -- Blademaster bot: also tally Evil-Eye kills while in the kill phase, so the goal
                 -- loop runs until 20 ACTUAL kills (not a fixed round count). Generation-keyed so it
                 -- resets each Run and survives serverhops.
@@ -32673,6 +32683,10 @@ end
                         local rep_start_idx, rep_count, rep_done = nil, 0, 0
                         local rep_goal_kind, rep_goal, rep_iters = nil, 0, 0
                         local rep_ing = nil
+                        local rep_monster, rep_monster_base = nil, 0
+                        local function count_monster_kills(name)
+                            return (name and name ~= "" and tonumber(mem:GetItem("xpfarm_mkill_" .. name))) or 0
+                        end
                         classbot_kill_phase = nil   -- not farming Evil Eyes until we enter that loop
                         -- if we're RESUMING inside an Evil-Eye goal loop (started mid-path after a
                         -- hop), turn kill-counting on now so kills before the next repeat_end count
@@ -32825,6 +32839,30 @@ end
                                     else
                                         library:Notify(string.format("Loop: %s %d/%d", rep_ing, prog, rep_goal), 3)
                                     end
+                                elseif step.goal_kind == "monster" then
+                                    -- MONSTER KILL loop: works in any path (not gated behind
+                                    -- classbot_full like Evil-Eye/Shrieker). Since the underlying
+                                    -- mem tally is a lifetime running total, not something that
+                                    -- naturally resets, a baseline is snapshotted the first time
+                                    -- this waypoint is entered and persisted per-waypoint so a
+                                    -- mid-loop serverhop doesn't lose it - only reset once the
+                                    -- goal is actually reached, so the next fresh lap re-baselines.
+                                    rep_goal_kind, rep_monster, rep_goal = "monster", step.monster_name or "", step.goal or 1
+                                    local base_key = "xpfarm_mkill_base_" .. i
+                                    if mem:HasItem(base_key) then
+                                        rep_monster_base = tonumber(mem:GetItem(base_key)) or 0
+                                    else
+                                        rep_monster_base = count_monster_kills(rep_monster)
+                                        pcall(function() mem:SetItem(base_key, tostring(rep_monster_base)) end)
+                                    end
+                                    local prog = count_monster_kills(rep_monster) - rep_monster_base
+                                    if prog >= rep_goal then
+                                        pcall(function() mem:SetItem(base_key, tostring(count_monster_kills(rep_monster))) end)
+                                        local e = find_repeat_end(i)
+                                        if e then i = e + 1; jumped = true; rep_start_idx = nil; rep_goal_kind = nil end
+                                    else
+                                        library:Notify(string.format("Bot: %s killed %d/%d", rep_monster, prog, rep_goal), 3)
+                                    end
                                 elseif classbot_goal_active(step) then
                                     rep_goal_kind, rep_goal = step.goal_kind, step.goal
                                     if rep_goal_kind == "evil" then classbot_kill_phase = "evil" end
@@ -32856,6 +32894,9 @@ end
                                         rep_count = (rs and rs.count) or 1
                                         if rs and rs.goal_kind == "ingredient" then
                                             rep_goal_kind, rep_goal, rep_ing = "ingredient", rs.goal or 1, rs.ingredient or ""
+                                        elseif rs and rs.goal_kind == "monster" then
+                                            rep_goal_kind, rep_monster, rep_goal = "monster", rs.monster_name or "", rs.goal or 1
+                                            rep_monster_base = tonumber(mem:GetItem("xpfarm_mkill_base_" .. rep_start_idx)) or 0
                                         elseif classbot_goal_active(rs) then
                                             rep_goal_kind, rep_goal = rs.goal_kind, rs.goal
                                             if rep_goal_kind == "evil" then classbot_kill_phase = "evil" end
@@ -32880,6 +32921,21 @@ end
                                         if rep_start_idx then library:Notify(string.format("Loop: %s goal reached (%d/%d)", rep_ing, prog, rep_goal), 4) end
                                         i = skip_returns_after(i); jumped = true
                                         rep_start_idx = nil; rep_goal_kind = nil; rep_ing = nil
+                                    end
+                                elseif rep_goal_kind == "monster" then
+                                    -- MONSTER KILL loop end: keep looping until the goal is hit.
+                                    rep_iters = rep_iters + 1
+                                    local prog = count_monster_kills(rep_monster) - rep_monster_base
+                                    if (not skip_rep) and rep_start_idx and prog < rep_goal and rep_iters < 999 then
+                                        library:Notify(string.format("Bot: %s killed %d/%d - keep going", rep_monster, prog, rep_goal), 2)
+                                        i = rep_start_idx + 1
+                                        jumped = true
+                                    else
+                                        library:Notify(string.format("Bot: %s goal reached (%d/%d)", rep_monster, prog, rep_goal), 4)
+                                        if rep_start_idx then
+                                            pcall(function() mem:SetItem("xpfarm_mkill_base_" .. rep_start_idx, tostring(count_monster_kills(rep_monster))) end)
+                                        end
+                                        rep_start_idx = nil; rep_goal_kind = nil; rep_monster = nil
                                     end
                                 elseif rep_goal_kind then
                                     -- GOAL loop: keep looping until the real goal is hit
