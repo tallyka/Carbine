@@ -8899,12 +8899,23 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     pcall(function() root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
                     pcall(function() root.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
 
-                    local spam_t0 = os.clock()
+                    -- Confirmed live: the character gets sent back (server-side position
+                    -- correction) BEFORE the menu fires. InvokeServer yields for its own
+                    -- round-trip, so firing attempts one-at-a-time (waiting for each
+                    -- response before the next) is too slow to win that race - the
+                    -- correction packet can arrive before any single sequential attempt
+                    -- completes. Fire a burst of invokes CONCURRENTLY the instant the
+                    -- position is set instead, so one has a real shot at landing first.
                     local fired_ok = false
-                    while (os.clock() - spam_t0) < 1 do
-                        local ok = pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
-                        if ok then fired_ok = true end
-                        task.wait(0.05)
+                    for _ = 1, 8 do
+                        task.spawn(function()
+                            local ok = pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
+                            if ok then fired_ok = true end
+                        end)
+                    end
+                    local spam_t0 = os.clock()
+                    while (os.clock() - spam_t0) < 1 and not fired_ok do
+                        task.wait()
                     end
                     library:Notify("Teleport: " .. (fired_ok and "menu fired" or "menu FAILED"), 3)
                     if not fired_ok then
@@ -27343,7 +27354,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 384 loaded - the manual '23' tab teleport now also noclips the jump/landing, same clip-back fix as the path waypoint version", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 385 loaded - Teleport Menu now fires ReturnToMenu as a concurrent burst instead of sequential attempts, was losing the race to server position correction", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -33597,13 +33608,23 @@ end
                                             pcall(function() root.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
 
                                             -- race the menu spam against whatever sends you back
-                                            -- (anti-cheat correction/etc) - spam every frame instead
-                                            -- of sleeping between fires, starting immediately.
-                                            local spam_t0 = os.clock()
+                                            -- (anti-cheat/position correction) - confirmed live the
+                                            -- character gets sent back BEFORE the menu fires.
+                                            -- InvokeServer yields for its own round-trip, so firing
+                                            -- one attempt at a time (even with no sleep between
+                                            -- them) still loses that race to a correction packet
+                                            -- that can arrive before a single sequential attempt's
+                                            -- response does. Fire a burst concurrently instead, the
+                                            -- instant the position is set.
                                             local fired_ok = false
-                                            while (os.clock() - spam_t0) < 1.5 do
-                                                local ok = pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
-                                                if ok then fired_ok = true end
+                                            for _ = 1, 8 do
+                                                task.spawn(function()
+                                                    local ok = pcall(function() rps.Requests.ReturnToMenu:InvokeServer() end)
+                                                    if ok then fired_ok = true end
+                                                end)
+                                            end
+                                            local spam_t0 = os.clock()
+                                            while (os.clock() - spam_t0) < 1.5 and not fired_ok do
                                                 task.wait()
                                             end
                                             if not fired_ok then
