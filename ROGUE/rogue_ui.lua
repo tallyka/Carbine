@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 377 loaded - path resume now prefers the exact last waypoint reached (persisted live) over nearest-point, unless 1200+ studs away", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 378 loaded - added Observe to the Target Class dropdown", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27335,7 +27335,7 @@ end
             -- gate is the "Required Weapon XP" slider below.
             local CLASS_LIST = {
                 "Knight", "Duelist", "Adept", "Mercenary", "Warden",
-                "Paladin", "Assassin", "Monk", "Warrior", "Custom"
+                "Paladin", "Assassin", "Monk", "Warrior", "Observe", "Custom"
             }
 
             -- Heuristic markers for world silver/loot drops. The SilverValue
