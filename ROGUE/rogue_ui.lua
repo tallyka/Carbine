@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 379 loaded - added 'monster' repeat goal kind: a loop can now require N real kills of a named monster instead of a fixed round count", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 380 loaded - fixed 'monster' repeat goal kind not walking the Return Points route (was doing a raw jump like evil/shrieker instead)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32859,7 +32859,12 @@ end
                                     if prog >= rep_goal then
                                         pcall(function() mem:SetItem(base_key, tostring(count_monster_kills(rep_monster))) end)
                                         local e = find_repeat_end(i)
-                                        if e then i = e + 1; jumped = true; rep_start_idx = nil; rep_goal_kind = nil end
+                                        if e then
+                                            classbot_catchup_to = e
+                                            library:Notify(string.format("Bot: %s already at goal (%d/%d) - walking through to the exit", rep_monster, prog, rep_goal), 3)
+                                        else
+                                            rep_start_idx = nil; rep_goal_kind = nil
+                                        end
                                     else
                                         library:Notify(string.format("Bot: %s killed %d/%d", rep_monster, prog, rep_goal), 3)
                                     end
@@ -32924,10 +32929,17 @@ end
                                     end
                                 elseif rep_goal_kind == "monster" then
                                     -- MONSTER KILL loop end: keep looping until the goal is hit.
+                                    -- Uses the SAME return-path mechanism the ingredient loop does
+                                    -- (walk_return_path/skip_returns_after) - confirmed live that
+                                    -- copying evil/shrieker's raw index jump instead meant the
+                                    -- Return Points (the green RTN route) never got walked at all,
+                                    -- for looping back OR for the final exit.
                                     rep_iters = rep_iters + 1
                                     local prog = count_monster_kills(rep_monster) - rep_monster_base
                                     if (not skip_rep) and rep_start_idx and prog < rep_goal and rep_iters < 999 then
-                                        library:Notify(string.format("Bot: %s killed %d/%d - keep going", rep_monster, prog, rep_goal), 2)
+                                        library:Notify(string.format("Bot: %s killed %d/%d - going back for more", rep_monster, prog, rep_goal), 2)
+                                        local hopped = walk_return_path(i, rep_start_idx)
+                                        if hopped then break end
                                         i = rep_start_idx + 1
                                         jumped = true
                                     else
@@ -32935,6 +32947,7 @@ end
                                         if rep_start_idx then
                                             pcall(function() mem:SetItem("xpfarm_mkill_base_" .. rep_start_idx, tostring(count_monster_kills(rep_monster))) end)
                                         end
+                                        i = skip_returns_after(i); jumped = true
                                         rep_start_idx = nil; rep_goal_kind = nil; rep_monster = nil
                                     end
                                 elseif rep_goal_kind then
