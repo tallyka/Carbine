@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 381 loaded - fixed serverhop resume restarting from point 1 for walking-path bots (path_resume_from was never set without hold_cf)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 383 loaded - fixed NPC dialogue ending early + Teleport Menu now noclips the jump/landing to avoid the clip-back bug", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -28113,8 +28113,22 @@ end
                 local hard_cap = math.max(duration, 45)
                 local last_poke = os.clock()
                 local pokes = 0
-                while in_dialogue() and not (shared and shared.is_unloading) do
+                -- in_dialogue() reads a server-side "InDialogue" tag that can briefly
+                -- disappear between one line ending and the next line's tag coming
+                -- back - confirmed live: picking ONE choice then immediately treating
+                -- that gap as "conversation over" and returning success, while later
+                -- lines/choices never fired at all. Give a genuine 1.5s grace window
+                -- before believing it's actually done, instead of breaking the loop
+                -- the instant in_dialogue() reads false even once.
+                local gone_since = nil
+                while not (shared and shared.is_unloading) do
                     if (os.clock() - t1) > hard_cap then break end
+                    if in_dialogue() then
+                        gone_since = nil
+                    else
+                        gone_since = gone_since or os.clock()
+                        if (os.clock() - gone_since) > 1.5 then break end
+                    end
                     if (os.clock() - last_event) > 20 and pokes >= 6 then break end   -- truly stuck
                     if (os.clock() - last_event) > 2 and (os.clock() - last_poke) > 2 then
                         last_poke = os.clock()
@@ -33535,6 +33549,19 @@ end
                                             local char = plr.Character
                                             local humanoid = char and FindFirstChildOfClass(char, "Humanoid")
                                             if humanoid then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+                                            -- Noclip for the jump+landing: same clip-back bug as
+                                            -- SmoothTeleport (landing at target_pos can clip into
+                                            -- world geometry and get shoved out before ReturnToMenu
+                                            -- fires). The character gets destroyed on the actual
+                                            -- respawn regardless, so this doesn't need restoring on
+                                            -- the success path - only if all 3 attempts fail below.
+                                            if char then
+                                                for _, part in ipairs(char:GetDescendants()) do
+                                                    if part:IsA("BasePart") then
+                                                        pcall(function() part.CanCollide = false end)
+                                                    end
+                                                end
+                                            end
                                             root.CFrame = root.CFrame + Vector3.new(0, 50, 0)
                                             task.wait(0.25)
 
@@ -33604,6 +33631,18 @@ end
                                         end
                                         if not landed then
                                             library:Notify("Path: Teleport Menu gave up after 3 attempts - continuing path", 6)
+                                            -- restore collision on whatever character exists now (a
+                                            -- fresh respawn is already CanCollide=true by default;
+                                            -- this only matters if it's still the old noclipped one
+                                            -- because nothing ever actually rejoined)
+                                            local cur = plr.Character
+                                            if cur then
+                                                for _, part in ipairs(cur:GetDescendants()) do
+                                                    if part:IsA("BasePart") then
+                                                        pcall(function() part.CanCollide = true end)
+                                                    end
+                                                end
+                                            end
                                         end
                                     end
                                     task.wait(0.3)
