@@ -27354,7 +27354,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 385 loaded - Teleport Menu now fires ReturnToMenu as a concurrent burst instead of sequential attempts, was losing the race to server position correction", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 386 loaded - added 'Teleport Once (no menu)' waypoint: flickers to a saved position and moves on, no ReturnToMenu/rejoin needed", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -28404,6 +28404,8 @@ end
                             color = Color3.fromRGB(120, 40, 200); label = string.format("%d SEAL", i)
                         elseif step.kind == "mana" then
                             color = Color3.fromRGB(80, 140, 255); label = string.format("%d MANA (%ds)", i, step.wait_time or 0)
+                        elseif step.kind == "teleport_once" then
+                            color = Color3.fromRGB(255, 220, 60); label = string.format("%d TP-ONCE", i)
                         else
                             color = Color3.fromRGB(0, 200, 255); label = string.format("%d (%ds)", i, step.wait_time or 0)
                         end
@@ -29127,7 +29129,7 @@ end
             end)
             group_travel = group_path   -- Path sub-tab
             group_travel:AddDropdown("xpfarm_wp_action", {
-                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Cast Spell", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Teleport Menu", "Reset If Safe" },
+                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Cast Spell", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Teleport Menu", "Teleport Once (no menu)", "Reset If Safe" },
                 Default = 1, Multi = false, Text = "Waypoint Action",
                 Tooltip = "What the 'Add Waypoint' button below creates",
                 Callback = function(v) selected_action = v end
@@ -29481,6 +29483,7 @@ end
                     elseif selected_action == "Attack Here" then kind = "attack"
                     elseif selected_action == "Charge Mana + Attack" then kind = "mana_attack"
                     elseif selected_action == "Cast Spell" then kind = "spell_cast"
+                    elseif selected_action == "Teleport Once (no menu)" then kind = "teleport_once"
                     elseif selected_action == "Shrieker Grab" then kind = "shrieker"
                     elseif selected_action == "Sealed Shrieker Grip" then kind = "sealed"
                     elseif selected_action == "Mine Here" then kind = "mine"
@@ -29629,6 +29632,7 @@ end
                         elseif selected_action == "Attack Here" then kind = "attack"
                         elseif selected_action == "Charge Mana + Attack" then kind = "mana_attack"
                         elseif selected_action == "Cast Spell" then kind = "spell_cast"
+                        elseif selected_action == "Teleport Once (no menu)" then kind = "teleport_once"
                         elseif selected_action == "Shrieker Grab" then kind = "shrieker"
                         elseif selected_action == "Sealed Shrieker Grip" then kind = "sealed"
                         elseif selected_action == "Charge Mana" then kind = "mana" end
@@ -33790,6 +33794,33 @@ end
                                         library:Notify("Path: Sealed Shrieker gripped", 3)
                                     else
                                         library:Notify("Path: no Sealed Shrieker gripped (timeout) - moving on", 4)
+                                    end
+                                elseif step.kind == "teleport_once" then
+                                    -- Flicker-teleport: jump to the point's saved CFrame ONCE, no
+                                    -- ReturnToMenu at all, just a brief hold so a proximity/touch
+                                    -- trigger tied to that spot has time to fire server-side, then
+                                    -- move on and let the server's own position correction snap
+                                    -- back naturally. Confirmed live that some triggers (Uber Sigil
+                                    -- items) activate from the teleport alone even though the
+                                    -- position doesn't stick - far cheaper than a full Teleport
+                                    -- Menu + rejoin cycle when you don't actually need to rejoin.
+                                    if step.cf then
+                                        local root = local_hrp()
+                                        if root then
+                                            local char = plr.Character
+                                            local humanoid = char and FindFirstChildOfClass(char, "Humanoid")
+                                            if humanoid then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+                                            pcall(function() root.CFrame = root.CFrame + Vector3.new(0, 50, 0) end)
+                                            task.wait(0.15)
+                                            root = local_hrp()
+                                            if root then
+                                                pcall(function() root.CFrame = step.cf end)
+                                                pcall(function() root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end)
+                                                pcall(function() root.AssemblyAngularVelocity = Vector3.new(0, 0, 0) end)
+                                            end
+                                            library:Notify("Path: teleported once (no menu)", 3)
+                                            task.wait((wait_s and wait_s > 0) and wait_s or 0.5)
+                                        end
                                     end
                                 elseif step.kind == "mana" then
                                     local dur = (step.wait_time and step.wait_time > 0) and step.wait_time or 30
