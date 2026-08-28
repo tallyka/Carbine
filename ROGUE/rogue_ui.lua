@@ -8877,6 +8877,19 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     local char = plr.Character
                     local humanoid = char and FindFirstChildOfClass(char, "Humanoid")
                     if humanoid then pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end) end
+                    -- Noclip for the jump+landing - without this the character can clip
+                    -- into geometry at target_pos and get physics-corrected out of place
+                    -- DURING the spam window below, before ReturnToMenu actually lands
+                    -- (looks like "the teleport fires too late" even though the request
+                    -- itself fires immediately - same root cause as the path waypoint's
+                    -- version of this teleport, fixed the same way).
+                    if char then
+                        for _, part in ipairs(char:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                pcall(function() part.CanCollide = false end)
+                            end
+                        end
+                    end
                     root.CFrame = root.CFrame + Vector3.new(0, 50, 0)
                     task.wait(0.25)
 
@@ -8894,7 +8907,19 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                         task.wait(0.05)
                     end
                     library:Notify("Teleport: " .. (fired_ok and "menu fired" or "menu FAILED"), 3)
-                    if not fired_ok then return end
+                    if not fired_ok then
+                        -- didn't actually rejoin - restore collision on this same
+                        -- (still current) character instead of leaving it noclipped
+                        local cur = plr.Character
+                        if cur then
+                            for _, part in ipairs(cur:GetDescendants()) do
+                                if part:IsA("BasePart") then
+                                    pcall(function() part.CanCollide = true end)
+                                end
+                            end
+                        end
+                        return
+                    end
 
                     pcall(function() plr.PlayerGui:WaitForChild("StartMenu", 30) end)
                     if plr.PlayerGui:FindFirstChild("StartMenu") then
@@ -27318,7 +27343,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 383 loaded - fixed NPC dialogue ending early + Teleport Menu now noclips the jump/landing to avoid the clip-back bug", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 384 loaded - the manual '23' tab teleport now also noclips the jump/landing, same clip-back fix as the path waypoint version", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
