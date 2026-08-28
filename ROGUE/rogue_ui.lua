@@ -27318,7 +27318,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 380 loaded - fixed 'monster' repeat goal kind not walking the Return Points route (was doing a raw jump like evil/shrieker instead)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 381 loaded - fixed serverhop resume restarting from point 1 for walking-path bots (path_resume_from was never set without hold_cf)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -35313,6 +35313,21 @@ end
                     return
                 end
                 task.wait(2)
+
+                -- Walking-path bots (no hold_cf - that's only the stationary "hold
+                -- one spot and farm" mode) had NOTHING setting path_resume_from
+                -- here, so the main loop's "path_resume_from or 1" fallback kicked
+                -- in and restarted from point 1 every time - confirmed live
+                -- ("sometimes ... restarts from point 1"). Give it the persisted
+                -- last-reached index (BUILD 377) so the main loop's own existing
+                -- AA-gun-safe catch-up walk (scans up to 50 points ahead) resumes
+                -- from the right place instead of the very start.
+                if #xp_path > 0 then
+                    local last_idx = tonumber(mem:GetItem("xpfarm_last_path_idx") or "")
+                    if last_idx and xp_path[last_idx] then
+                        path_resume_from = last_idx
+                    end
+                end
 
                 -- Get back to the hold spot using the bot's movement. RL keeps
                 -- your position across servers, so usually we spawn right at the
