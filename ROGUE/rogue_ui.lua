@@ -27354,7 +27354,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 386 loaded - added 'Teleport Once (no menu)' waypoint: flickers to a saved position and moves on, no ReturnToMenu/rejoin needed", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 387 loaded - added Observe to the Class Bots tab's Emergency Serverhop Items dropdown (was a different dropdown than BUILD 378 touched)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -30916,7 +30916,7 @@ end
                 })
                 opt:AddDropdown("xpfarm_emergency_items", {
                     Text = "Emergency Serverhop Items",
-                    Values = { "Perflora", "Pebble", "Celeritas", "Fimbulvetr" },
+                    Values = { "Perflora", "Pebble", "Celeritas", "Fimbulvetr", "Observe" },
                     Multi = true,
                     Default = {},
                     Tooltip = "Instantly serverhop if another player is HOLDING any of these items (only while the bot is running). Stays through every hop.",
