@@ -8735,12 +8735,24 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                     return names
                 end
 
+                -- Auto-watch every OTHER account already in the server at the moment
+                -- this loads, instead of requiring a manual dropdown pick each time -
+                -- excludes this account itself (watching yourself leave is meaningless).
+                local auto_watch_names = get_server_player_names()
+                local auto_watch_default = {}
+                for _, nm in ipairs(auto_watch_names) do
+                    if nm ~= plr.Name then
+                        watched_players[nm] = true
+                        auto_watch_default[nm] = true
+                    end
+                end
+
                 group_23watch:AddDropdown("watch23_players", {
                     Text = "Watch These Players",
-                    Tooltip = "If ANY selected player leaves the server, this account menus for safety.",
-                    Values = get_server_player_names(),
+                    Tooltip = "If ANY selected player leaves the server, this account menus for safety. Auto-filled with everyone in the server on load (excluding yourself) - adjust here if needed.",
+                    Values = auto_watch_names,
                     Multi = true,
-                    Default = {},
+                    Default = auto_watch_default,
                     Callback = function(value)
                         watched_players = {}
                         for name, selected in next, value do
@@ -27354,7 +27366,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 387 loaded - added Observe to the Class Bots tab's Emergency Serverhop Items dropdown (was a different dropdown than BUILD 378 touched)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 388 loaded - '23' tab's Menu Watch now auto-watches everyone in the server on load instead of requiring a manual dropdown pick", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
