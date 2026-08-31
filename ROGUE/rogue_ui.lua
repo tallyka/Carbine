@@ -27366,7 +27366,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 388 loaded - '23' tab's Menu Watch now auto-watches everyone in the server on load instead of requiring a manual dropdown pick", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 389 loaded - Phase 1 of Gate porting: new 'Gate Point' waypoint actually casts Gate (adapted from Trinket Bot's GateImpl)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -27638,6 +27638,229 @@ end
                 local hrp_after = local_hrp()
                 return hrp_after ~= nil and (hrp_after.Position - target_pos).Magnitude <= 10
             end
+
+            -- XP Farm Gate: adapted from the Trinket Bot's own GateImpl/Gate (same
+            -- cast sequence, same NoFall/backfire verification), swapped to XP
+            -- Farm's own running conditions. Wrapped in its own isolated closure
+            -- (not a raw top-level local) - Trinket Bot's small helpers this
+            -- depends on (getPing, Get/race check, blockInputs) are themselves
+            -- scoped to ITS OWN closure and unreachable here, so this defines its
+            -- own copies rather than guessing at cross-closure reachability. The
+            -- resulting function is bridged out via cheat_client (same pattern as
+            -- ExecutePath/trinket_bot elsewhere) instead of a new top-level local,
+            -- so the main step-execution loop can call it without adding to this
+            -- file's already-near-capacity shared register count.
+            pcall(function()
+                local xpfarm_gating = false
+                local xpfarm_mana_initialized = false
+                local xpfarm_input_blocked = false
+
+                local function xpfarm_get_ping()
+                    local ok, ping = pcall(function()
+                        return Services.Stats:WaitForChild("PerformanceStats"):WaitForChild("Ping"):GetValue()
+                    end)
+                    return ok and ping or 0
+                end
+
+                local function xpfarm_get_race()
+                    local ok, res = pcall(function()
+                        return rps.Requests.Get:InvokeServer(utf8.char(65532) .. "\240\159\152\131", "Race")["Race"]
+                    end)
+                    return ok and res or nil
+                end
+
+                local function xpfarm_block_inputs()
+                    xpfarm_input_blocked = true
+                    pcall(function()
+                        cas:BindAction("XPFarmGateBlockKeys", function()
+                            return Enum.ContextActionResult.Sink
+                        end, false, Enum.KeyCode.F, Enum.KeyCode.G)
+                        cas:BindAction("XPFarmGateBlockMouse", function()
+                            if xpfarm_input_blocked then return Enum.ContextActionResult.Sink end
+                        end, false, Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2)
+                    end)
+                end
+                local function xpfarm_unblock_inputs()
+                    xpfarm_input_blocked = false
+                    pcall(function() cas:UnbindAction("XPFarmGateBlockKeys") end)
+                    pcall(function() cas:UnbindAction("XPFarmGateBlockMouse") end)
+                end
+
+                local function xpfarm_running()
+                    return Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value
+                        and shared and not shared.is_unloading
+                end
+
+                local function XPFarmGateImpl(where, expected_destination)
+                    if not xpfarm_running() then return false end
+
+                    if plr.Character then
+                        local humanoid = FindFirstChildOfClass(plr.Character, "Humanoid")
+                        if humanoid then
+                            humanoid:SetStateEnabled(5, true)
+                            humanoid:ChangeState(5)
+                        end
+                    end
+
+                    if not plr.Character or not FindFirstChild(plr.Character, "HumanoidRootPart") then
+                        warn("[XPFarmGate] Character not found")
+                        return false
+                    end
+
+                    local gateTool = FindFirstChild(plr.Character, "Gate") or FindFirstChild(plr.Backpack, "Gate")
+                    if not gateTool then
+                        warn("[XPFarmGate] Gate tool not found")
+                        return false
+                    end
+                    if FindFirstChild(plr.Backpack, "Gate") then
+                        pcall(function() plr.Character.Humanoid:EquipTool(plr.Backpack["Gate"]) end)
+                        task.wait(0.3)
+                    end
+
+                    local CollectionService = Services.CollectionService
+                    if CollectionService:HasTag(plr.Character, "SnapCool") then
+                        library:Notify("Path: waiting for SnapCool to expire before gating...")
+                        local snap_t0 = os.clock()
+                        while CollectionService:HasTag(plr.Character, "SnapCool") and (os.clock() - snap_t0) < 30 do
+                            if not xpfarm_running() then return false end
+                            if cs:HasTag(plr.Character, "Danger") then
+                                library:Notify("Path: entered Danger while waiting for SnapCool - aborting gate", 4)
+                                return false
+                            end
+                            task.wait(0.1)
+                        end
+                        if CollectionService:HasTag(plr.Character, "SnapCool") then
+                            library:Notify("Path: SnapCool timeout - gate aborted", 4)
+                            return false
+                        end
+                    end
+
+                    local character = plr.Character
+                    local mana = FindFirstChild(character, "Mana")
+                    if not mana then
+                        warn("[XPFarmGate] Mana not found")
+                        return false
+                    end
+
+                    if character and cs:HasTag(character, "Danger") then
+                        local has_player_nearby = false
+                        local closest_name, closest_dist = "", math.huge
+                        local hrp = local_hrp()
+                        if hrp then
+                            for _, other in ipairs(plrs:GetPlayers()) do
+                                if other ~= plr and other.Character then
+                                    local ohrp = FindFirstChild(other.Character, "HumanoidRootPart")
+                                    if ohrp then
+                                        local d = (ohrp.Position - hrp.Position).Magnitude
+                                        if d <= 250 then
+                                            has_player_nearby = true
+                                            if d < closest_dist then closest_dist, closest_name = d, other.Name end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        if has_player_nearby then
+                            library:Notify(string.format("Path: in danger with %s within %.0f studs - gating away despite danger", closest_name, closest_dist), 4)
+                        else
+                            library:Notify("Path: in danger, no players nearby - waiting for it to clear before gating", 4)
+                            local dt0 = os.clock()
+                            repeat task.wait(0.1) until not cs:HasTag(character, "Danger") or (os.clock() - dt0) > 30 or not xpfarm_running()
+                            if not xpfarm_running() then return false end
+                        end
+                    end
+
+                    if not xpfarm_mana_initialized and vim then
+                        task.wait(0.3)
+                        vim:SendKeyEvent(true, Enum.KeyCode.G, false, game)
+                        task.wait(0.15)
+                        vim:SendKeyEvent(false, Enum.KeyCode.G, false, game)
+                        task.wait(0.2)
+                        xpfarm_mana_initialized = true
+                    end
+
+                    xpfarm_block_inputs()
+                    task.delay(5, function()
+                        if xpfarm_input_blocked then xpfarm_unblock_inputs() end
+                    end)
+
+                    local is_azael = xpfarm_get_race() == "Azael"
+                    local has_philosophers_stone = false
+                    pcall(function()
+                        local artifacts = FindFirstChild(plr.Character, "Artifacts")
+                        has_philosophers_stone = artifacts and FindFirstChild(artifacts, "PhilosophersStone") ~= nil
+                    end)
+
+                    local in_danger = character and cs:HasTag(character, "Danger")
+                    if is_azael and not in_danger then
+                        if mana.Value <= 15 then pcall(function() utility:charge_mana_until(15) end) end
+                    elseif has_philosophers_stone then
+                        if mana.Value < 60 then pcall(function() utility:charge_mana_until(60) end) end
+                    else
+                        local ping = xpfarm_get_ping()
+                        local adjusted_target = math.clamp(79 - ((ping / 900) * 50), 75, 83)
+                        if mana.Value > 83 then
+                            pcall(function() utility:decharge_mana() end)
+                            local dc0 = os.clock()
+                            while mana.Value > 83 and xpfarm_running() and (os.clock() - dc0) < 15 do task.wait(0.05) end
+                        end
+                        if mana.Value < adjusted_target then
+                            pcall(function() utility:charge_mana_until(adjusted_target) end)
+                        end
+                    end
+
+                    task.wait(0.05)
+                    pcall(function() utility:RightClick() end)
+                    task.wait(0.8)
+
+                    if FindFirstChild(gateTool, "PsuedoChatted") then
+                        pcall(function() gateTool.PsuedoChatted:FireServer(where) end)
+                    end
+
+                    if xpfarm_input_blocked then xpfarm_unblock_inputs() end
+
+                    local wait_t0 = tick()
+                    while tick() - wait_t0 < 2.5 and xpfarm_running() do
+                        if FindFirstChild(character, "NoFall") then
+                            task.wait(1.5)
+                            local hrp_now = character and FindFirstChild(character, "HumanoidRootPart")
+                            if hrp_now then
+                                if expected_destination then
+                                    local dist = (hrp_now.Position - expected_destination).Magnitude
+                                    if dist > 700 then
+                                        library:Notify(string.format("Path: gate BACKFIRE detected (%.0f studs off)", dist), 6)
+                                        return false
+                                    end
+                                    library:Notify(string.format("Path: gated to %s (%.0f studs from destination)", tostring(where), dist), 4)
+                                    return true
+                                end
+                                library:Notify("Path: gated to " .. tostring(where), 4)
+                                return true
+                            end
+                            warn("[XPFarmGate] character lost during gate verification")
+                            return false
+                        end
+                        task.wait(0.1)
+                    end
+
+                    warn("[XPFarmGate] gate teleport failed: NoFall not found after 2.5s")
+                    return false
+                end
+
+                local function XPFarmGate(where, expected_destination)
+                    xpfarm_gating = true
+                    local ok, result = pcall(XPFarmGateImpl, where, expected_destination)
+                    xpfarm_gating = false
+                    if not ok then
+                        warn("[XPFarmGate] error: " .. tostring(result))
+                        return false
+                    end
+                    return result
+                end
+
+                cheat_client.xpfarm_gate = XPFarmGate
+                cheat_client.xpfarm_is_gating = function() return xpfarm_gating end
+            end)
 
             -- Hard stop: death or an unrecoverable position. We never teleport
             -- to recover - we kick out of the game instead (same flow as the
@@ -28418,6 +28641,8 @@ end
                             color = Color3.fromRGB(80, 140, 255); label = string.format("%d MANA (%ds)", i, step.wait_time or 0)
                         elseif step.kind == "teleport_once" then
                             color = Color3.fromRGB(255, 220, 60); label = string.format("%d TP-ONCE", i)
+                        elseif step.kind == "gate_point" then
+                            color = Color3.fromRGB(160, 255, 160); label = string.format("%d GATE %s", i, step.gate_location or "")
                         else
                             color = Color3.fromRGB(0, 200, 255); label = string.format("%d (%ds)", i, step.wait_time or 0)
                         end
@@ -28523,6 +28748,7 @@ end
                         if step.skip_if_armed then e.skip_if_armed = true end
                         if step.choice_sequence then e.choice_sequence = step.choice_sequence end
                         if step.spell_name then e.spell_name = step.spell_name end
+                        if step.gate_location then e.gate_location = step.gate_location end
                         table.insert(steps, e)
                     end
                 end
@@ -28620,6 +28846,7 @@ end
                         if step.choice_sequence then e.choice_sequence = step.choice_sequence end
                         if step.skip_if_armed then e.skip_if_armed = true end
                         if step.spell_name then e.spell_name = step.spell_name end
+                        if step.gate_location then e.gate_location = step.gate_location end
                         table.insert(xp_path, e)
                     end
                 end
@@ -29141,7 +29368,7 @@ end
             end)
             group_travel = group_path   -- Path sub-tab
             group_travel:AddDropdown("xpfarm_wp_action", {
-                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Cast Spell", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Teleport Menu", "Teleport Once (no menu)", "Reset If Safe" },
+                Values = { "Move + Wait", "Inn Stop", "Talk to NPC", "Attack Here", "Charge Mana + Attack", "Cast Spell", "Shrieker Grab", "Sealed Shrieker Grip", "Equip Pickaxe", "Mine Here", "Instant Mine On", "Instant Mine Off", "Smelt Here", "Craft Weapon", "Sell Weapons", "Make Potions", "Wait For Ingredient", "Hold Point", "Charge Mana", "Offset On", "Offset Off", "Auto Ingredient On", "Auto Ingredient Off", "Auto Bag On", "Auto Bag Off", "Skip Illusionist On", "Skip Illusionist Off", "Loop Orderly On", "Loop Orderly Off", "Repeat Start", "Repeat (Ingredient)", "Repeat (Monster Drop)", "Repeat End", "Return Point", "Return Serverhop", "End Path", "Wait For Ores", "Serverhop", "CR Captcha", "Wait Timer", "Wait For Day", "Loop Orderly (N times)", "Equip Item", "Teleport Menu", "Teleport Once (no menu)", "Gate Point", "Reset If Safe" },
                 Default = 1, Multi = false, Text = "Waypoint Action",
                 Tooltip = "What the 'Add Waypoint' button below creates",
                 Callback = function(v) selected_action = v end
@@ -29190,6 +29417,11 @@ end
                 Default = "1",
                 Numeric = true,
                 Placeholder = "seconds between each material/craft"
+            })
+            group_travel:AddInput("xpfarm_gate_location", {
+                Text = "Gate Location (name)",
+                Default = "",
+                Placeholder = "e.g. Oresfall - the destination name the Gate ability announces"
             })
             group_travel:AddInput("xpfarm_npc_name", {
                 Text = "NPC Name (optional)",
@@ -29496,6 +29728,7 @@ end
                     elseif selected_action == "Charge Mana + Attack" then kind = "mana_attack"
                     elseif selected_action == "Cast Spell" then kind = "spell_cast"
                     elseif selected_action == "Teleport Once (no menu)" then kind = "teleport_once"
+                    elseif selected_action == "Gate Point" then kind = "gate_point"
                     elseif selected_action == "Shrieker Grab" then kind = "shrieker"
                     elseif selected_action == "Sealed Shrieker Grip" then kind = "sealed"
                     elseif selected_action == "Mine Here" then kind = "mine"
@@ -29508,6 +29741,8 @@ end
                     local step = { kind = kind, cf = hrp.CFrame, wait_time = wt }
                     if kind == "spell_cast" then
                         step.spell_name = (Options.xpfarm_spell_name and Options.xpfarm_spell_name.Value) or ""
+                    elseif kind == "gate_point" then
+                        step.gate_location = (Options.xpfarm_gate_location and Options.xpfarm_gate_location.Value) or ""
                     elseif kind == "potion" then
                         step.potion = (Options.xpfarm_potion and Options.xpfarm_potion.Value) or "Health Potion"
                         step.count = math.max(0, math.floor(tonumber(Options.xpfarm_potion_count and Options.xpfarm_potion_count.Value) or 0))
@@ -29645,6 +29880,7 @@ end
                         elseif selected_action == "Charge Mana + Attack" then kind = "mana_attack"
                         elseif selected_action == "Cast Spell" then kind = "spell_cast"
                         elseif selected_action == "Teleport Once (no menu)" then kind = "teleport_once"
+                        elseif selected_action == "Gate Point" then kind = "gate_point"
                         elseif selected_action == "Shrieker Grab" then kind = "shrieker"
                         elseif selected_action == "Sealed Shrieker Grip" then kind = "sealed"
                         elseif selected_action == "Charge Mana" then kind = "mana" end
@@ -29657,6 +29893,8 @@ end
                             if Options.xpfarm_npc_skip_armed and Options.xpfarm_npc_skip_armed.Value then ns.skip_if_armed = true end
                         elseif kind == "spell_cast" then
                             ns.spell_name = (Options.xpfarm_spell_name and Options.xpfarm_spell_name.Value) or ""
+                        elseif kind == "gate_point" then
+                            ns.gate_location = (Options.xpfarm_gate_location and Options.xpfarm_gate_location.Value) or ""
                         end
                         xp_path[n] = ns
                     end
@@ -33832,6 +34070,30 @@ end
                                             end
                                             library:Notify("Path: teleported once (no menu)", 3)
                                             task.wait((wait_s and wait_s > 0) and wait_s or 0.5)
+                                        end
+                                    end
+                                elseif step.kind == "gate_point" then
+                                    -- Uses the Gate ability instead of walking/teleporting - phase 1
+                                    -- of the Trinket Bot gating port (core cast mechanism only; the
+                                    -- emergency-escape triggers are a separate follow-up).
+                                    local gate_fn = cheat_client and cheat_client.xpfarm_gate
+                                    if not gate_fn then
+                                        library:Notify("Path: Gate system not loaded, skipping gate point", 5)
+                                    else
+                                        local next_step = xp_path[i + 1]
+                                        local expected_dest = next_step and next_step.cf and next_step.cf.Position or nil
+                                        local where = step.gate_location or ""
+                                        library:Notify(string.format("Path: gating to %s...", where ~= "" and where or "?"), 3)
+                                        local gated = false
+                                        for attempt = 1, 3 do
+                                            if not (Toggles.xpfarm_path_run and Toggles.xpfarm_path_run.Value) or (shared and shared.is_unloading) then break end
+                                            gated = gate_fn(where, expected_dest)
+                                            if gated then break end
+                                            library:Notify(string.format("Path: gate to %s failed - retrying (%d/3)", where ~= "" and where or "?", attempt), 4)
+                                            task.wait(1)
+                                        end
+                                        if not gated then
+                                            library:Notify("Path: gate failed after 3 attempts - continuing path", 6)
                                         end
                                     end
                                 elseif step.kind == "mana" then
