@@ -7407,7 +7407,8 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
             Macros = window:AddTab("Macros", "play"),
             Interface = window:AddTab("Interface", "monitor"),
             Config = window:AddTab("Config", "save"),
-            TwentyThree = window:AddTab("23", "map-pin")
+            TwentyThree = window:AddTab("23", "map-pin"),
+            Orderly = window:AddTab("Orderly", "list-ordered")
         }
 
         do
@@ -9479,6 +9480,61 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Callback = function(value)
                 end
             })
+
+            do
+                local group_orderly = Tabs.Orderly:AddLeftGroupbox("Orderly Points")
+
+                local function orderly_add(amount)
+                    local cur = tonumber(mem:GetItem("xpfarm_orderly_points")) or 0
+                    local new_val = math.max(0, cur + amount)
+                    mem:SetItem("xpfarm_orderly_points", tostring(new_val))
+                    library:Notify(string.format("Orderly: %d -> %d", cur, new_val), 2)
+                end
+
+                local orderly_count_label = group_orderly:AddLabel("orderly_count_lbl", { Text = "Orderly: 0", DoesWrap = true })
+                task.spawn(function()
+                    while shared and not shared.is_unloading do
+                        task.wait(1)
+                        pcall(function()
+                            local n = tonumber(mem:GetItem("xpfarm_orderly_points")) or 0
+                            if n < 10 then
+                                orderly_count_label:SetText(string.format("Orderly: %d (elixirs stop giving more at 10)", n))
+                            else
+                                orderly_count_label:SetText(string.format("Orderly: %d (elixirs capped - use quests)", n))
+                            end
+                        end)
+                    end
+                end)
+
+                group_orderly:AddInput("xpfarm_orderly_set", {
+                    Text = "Set Orderly Count",
+                    Default = "",
+                    Numeric = true,
+                    Finished = false,
+                    Placeholder = "your current Orderly total",
+                    Tooltip = "Type your real current Orderly amount to sync the tracker (e.g. after a quest turn-in). Tespian Elixirs give +2 Orderly per cycle only until this reaches 10 - past that they give nothing.",
+                    Callback = function(value)
+                        local num = tonumber(value)
+                        if num and num >= 0 then
+                            mem:SetItem("xpfarm_orderly_points", tostring(math.floor(num)))
+                        end
+                    end
+                })
+
+                local group_orderly_adjust = Tabs.Orderly:AddRightGroupbox("Quick Adjust")
+
+                group_orderly_adjust:AddButton({ Text = "+1 Orderly", Func = function() orderly_add(1) end })
+                group_orderly_adjust:AddButton({ Text = "+2 Orderly", Func = function() orderly_add(2) end })
+                group_orderly_adjust:AddButton({ Text = "+3 Orderly", Func = function() orderly_add(3) end })
+                group_orderly_adjust:AddButton({ Text = "+4 Orderly", Func = function() orderly_add(4) end })
+                group_orderly_adjust:AddButton({ Text = "+5 Orderly", Func = function() orderly_add(5) end })
+                group_orderly_adjust:AddDivider()
+                group_orderly_adjust:AddButton({ Text = "-1 Orderly", Func = function() orderly_add(-1) end })
+                group_orderly_adjust:AddButton({ Text = "Reset to 0", Func = function()
+                    mem:SetItem("xpfarm_orderly_points", "0")
+                    library:Notify("Orderly reset to 0", 2)
+                end })
+            end
 
             group_farm:AddToggle("train_climb", {
                 Text = "Train Climb",
@@ -27366,7 +27422,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 389 loaded - Phase 1 of Gate porting: new 'Gate Point' waypoint actually casts Gate (adapted from Trinket Bot's GateImpl)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 391 loaded - Orderly tracker moved to its own 'Orderly' tab with +1/+2/+3/+4/+5/-1/Reset quick-adjust buttons", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -33629,6 +33685,13 @@ end
 
                                             task.wait(0.5) -- small settle buffer for backpack/character to finish populating
 
+                                            pcall(function()
+                                                local cur = tonumber(mem:GetItem("xpfarm_orderly_points")) or 0
+                                                if cur < 10 then
+                                                    mem:SetItem("xpfarm_orderly_points", tostring(math.min(10, cur + 2)))
+                                                end
+                                            end)
+
                                             done = done + 1
                                             print(string.format("[ORDERLY] rep complete, done=%d/%d", done, target_n))
                                         else
@@ -37629,6 +37692,13 @@ end
 
                             repeat task.wait(0.5)
                             until FindFirstChild(plr.Character, "Immortal")
+
+                            pcall(function()
+                                local cur = tonumber(mem:GetItem("xpfarm_orderly_points")) or 0
+                                if cur < 10 then
+                                    mem:SetItem("xpfarm_orderly_points", tostring(math.min(10, cur + 2)))
+                                end
+                            end)
                         end
                     end
                 end
