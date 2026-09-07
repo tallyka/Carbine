@@ -18456,6 +18456,101 @@ if game.PlaceId == 3541987450 or game.PlaceId == 5208655184 or game.PlaceId == 1
                 Tooltip = "Select items to automatically drop during botting"
             })
 
+            do
+                local function get_backpack_tool_names()
+                    local names = {}
+                    local backpack = plr:FindFirstChildOfClass("Backpack")
+                    if backpack then
+                        for _, tool in ipairs(backpack:GetChildren()) do
+                            if tool:IsA("Tool") then
+                                table.insert(names, tool.Name)
+                            end
+                        end
+                    end
+                    if plr.Character then
+                        local held = FindFirstChildOfClass(plr.Character, "Tool")
+                        if held then table.insert(names, held.Name) end
+                    end
+                    table.sort(names)
+                    return names
+                end
+
+                group_trinket_bot:AddLabel("Mass Drop (repeatedly drops one item until it's gone)")
+                group_trinket_bot:AddDropdown("MassDropItem", {
+                    Text = "Item to Drop",
+                    Values = get_backpack_tool_names(),
+                    Multi = false,
+                    Default = 1,
+                    Tooltip = "Pick an item currently in your inventory to repeatedly drop."
+                })
+
+                group_trinket_bot:AddButton("refresh_massdrop_items", {
+                    Text = "Refresh Inventory List",
+                    Func = function()
+                        if Options.MassDropItem then
+                            Options.MassDropItem:SetValues(get_backpack_tool_names())
+                        end
+                    end
+                })
+
+                local massdrop_active = false
+
+                group_trinket_bot:AddToggle("MassDropActive", {
+                    Text = "Drop Selected Item Until Gone",
+                    Default = false,
+                    Callback = function(value)
+                        massdrop_active = value
+                        if not value then return end
+
+                        local item_name = Options.MassDropItem and Options.MassDropItem.Value
+                        if not item_name or item_name == "" then
+                            library:Notify("Mass Drop: pick an item first", 4)
+                            massdrop_active = false
+                            if Toggles.MassDropActive then Toggles.MassDropActive:SetValue(false) end
+                            return
+                        end
+
+                        task.spawn(function()
+                            library:Notify("Mass Drop: dropping " .. item_name .. " until gone...", 4)
+                            while massdrop_active and shared and not shared.is_unloading do
+                                local character = plr.Character
+                                if not character or not character:FindFirstChild("Humanoid") then
+                                    task.wait(0.5)
+                                else
+                                    local backpack = plr:FindFirstChildOfClass("Backpack")
+                                    local held = FindFirstChildOfClass(character, "Tool")
+                                    local item = (held and held.Name == item_name) and held
+                                        or (backpack and FindFirstChild(backpack, item_name))
+
+                                    if not item then
+                                        library:Notify("Mass Drop: out of " .. item_name, 4)
+                                        massdrop_active = false
+                                        if Toggles.MassDropActive then Toggles.MassDropActive:SetValue(false) end
+                                        break
+                                    end
+
+                                    if item.Parent ~= character then
+                                        pcall(function() character.Humanoid:EquipTool(item) end)
+                                        local t0 = tick()
+                                        while item.Parent ~= character and (tick() - t0) < 3 and massdrop_active do
+                                            task.wait(0.1)
+                                        end
+                                    end
+
+                                    if item.Parent == character and massdrop_active then
+                                        task.wait(0.075)
+                                        vim:SendKeyEvent(true, Enum.KeyCode.Backspace, false, game)
+                                        task.wait()
+                                        vim:SendKeyEvent(false, Enum.KeyCode.Backspace, false, game)
+                                        task.wait(0.3)
+                                    end
+                                end
+                            end
+                        end)
+                    end
+                })
+            end
+
             group_trinket_bot:AddLabel("Auto Use Items")
             group_trinket_bot:AddDropdown("AutoUseItems", {
                 Text = "Auto Use",
@@ -27422,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 391 loaded - Orderly tracker moved to its own 'Orderly' tab with +1/+2/+3/+4/+5/-1/Reset quick-adjust buttons", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 393 loaded - Mass Drop toggle + Auto Knock (re-knocks you the instant you get up, next to Knock Self)", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32721,6 +32816,42 @@ end
                         Callback = function() do_knock_self() end
                     })
                 end)
+
+                -- Auto Knock: watches the Knocked tag and re-knocks the instant it clears
+                -- (you "get up"). Waits for the tag to actually appear after each attempt
+                -- before checking again - otherwise a slow fall (high knock height) would
+                -- get re-triggered mid-air and stack the launch height every tick, which
+                -- is exactly the permadeath risk do_knock_self's height slider warns about.
+                local auto_knock_active = false
+                g_hc:AddToggle("xpfarm_auto_knock", {
+                    Text = "Auto Knock (re-knock when you get up)",
+                    Default = false,
+                    Tooltip = "Uses the Fall Knock Height above. The moment the Knocked tag clears, immediately fall-knocks you again - keeps you knocked down until you turn this off.",
+                    Callback = function(value)
+                        auto_knock_active = value
+                        if not value then return end
+                        task.spawn(function()
+                            while auto_knock_active and shared and not shared.is_unloading do
+                                local char = plr.Character
+                                local hum = char and char:FindFirstChild("Humanoid")
+                                local tb = cheat_client.trinket_bot
+                                if hum and hum.Health > 0 and not (tb and tb.gating) then
+                                    if not cs:HasTag(char, "Knocked") then
+                                        do_knock_self()
+                                        local t0 = tick()
+                                        repeat
+                                            task.wait(0.2)
+                                        until cs:HasTag(char, "Knocked") or (tick() - t0) > 6 or not auto_knock_active
+                                    else
+                                        task.wait(0.5)
+                                    end
+                                else
+                                    task.wait(0.5)
+                                end
+                            end
+                        end)
+                    end
+                })
 
                 -- Chokeout (knock): fire the same client signals the other knock script uses -
                 -- CombatEffects "Chokeout2" + StopSprint (the chokeout you do while holding a grab).
