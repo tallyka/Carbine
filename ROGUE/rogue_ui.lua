@@ -27517,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 393 loaded - Mass Drop toggle + Auto Knock (re-knocks you the instant you get up, next to Knock Self)", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 394 loaded - Auto Knock moved to the calibrated Self Fall Damage remote (Knock Yourself), no more teleport-fall", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32379,6 +32379,53 @@ end
                     Tooltip = "Fires the fall-damage remote at a lethal magnitude - this WILL kill you.",
                     Func = function() sd_fire(0.8059, 3.0100) end
                 })
+
+                -- Auto Knock: same "Knock Yourself" remote fire (sd_fire(0,1)) as the
+                -- button above - no teleport/physics fall involved, so no permadeath
+                -- risk and no waiting on gravity. Watches the Knocked tag and re-fires
+                -- the instant it clears (you "get up"), with a short grace window after
+                -- each fire so a slightly-delayed tag update can't cause a double-fire.
+                group_sd:AddDivider()
+                local auto_knock_active = false
+                group_sd:AddToggle("xpfarm_auto_knock", {
+                    Text = "Auto Knock (re-knock when you get up)",
+                    Default = false,
+                    Tooltip = "Uses the same calibrated remote as 'Knock Yourself' above - needs one real fall first if it says 'not calibrated'.",
+                    Callback = function(value)
+                        auto_knock_active = value
+                        if not value then return end
+                        task.spawn(function()
+                            local warned_uncalibrated = false
+                            while auto_knock_active and shared and not shared.is_unloading do
+                                local char = plr.Character
+                                local hum = char and char:FindFirstChild("Humanoid")
+                                if hum and hum.Health > 0 then
+                                    if not cs:HasTag(char, "Knocked") then
+                                        local r = rawget(getgenv(), "Carbine_FallDamageRemote")
+                                        if not r or not r.Parent then
+                                            if not warned_uncalibrated then
+                                                library:Notify("Auto Knock: not calibrated yet - take one real fall first", 6)
+                                                warned_uncalibrated = true
+                                            end
+                                            task.wait(2)
+                                        else
+                                            warned_uncalibrated = false
+                                            sd_fire(0, 1)
+                                            local t0 = tick()
+                                            repeat
+                                                task.wait(0.2)
+                                            until cs:HasTag(char, "Knocked") or (tick() - t0) > 4 or not auto_knock_active
+                                        end
+                                    else
+                                        task.wait(0.5)
+                                    end
+                                else
+                                    task.wait(0.5)
+                                end
+                            end
+                        end)
+                    end
+                })
             end)
 
             -- Stella Map Hide: replicates ONLY Stella's self-hide signal (a signed POST
@@ -32816,42 +32863,6 @@ end
                         Callback = function() do_knock_self() end
                     })
                 end)
-
-                -- Auto Knock: watches the Knocked tag and re-knocks the instant it clears
-                -- (you "get up"). Waits for the tag to actually appear after each attempt
-                -- before checking again - otherwise a slow fall (high knock height) would
-                -- get re-triggered mid-air and stack the launch height every tick, which
-                -- is exactly the permadeath risk do_knock_self's height slider warns about.
-                local auto_knock_active = false
-                g_hc:AddToggle("xpfarm_auto_knock", {
-                    Text = "Auto Knock (re-knock when you get up)",
-                    Default = false,
-                    Tooltip = "Uses the Fall Knock Height above. The moment the Knocked tag clears, immediately fall-knocks you again - keeps you knocked down until you turn this off.",
-                    Callback = function(value)
-                        auto_knock_active = value
-                        if not value then return end
-                        task.spawn(function()
-                            while auto_knock_active and shared and not shared.is_unloading do
-                                local char = plr.Character
-                                local hum = char and char:FindFirstChild("Humanoid")
-                                local tb = cheat_client.trinket_bot
-                                if hum and hum.Health > 0 and not (tb and tb.gating) then
-                                    if not cs:HasTag(char, "Knocked") then
-                                        do_knock_self()
-                                        local t0 = tick()
-                                        repeat
-                                            task.wait(0.2)
-                                        until cs:HasTag(char, "Knocked") or (tick() - t0) > 6 or not auto_knock_active
-                                    else
-                                        task.wait(0.5)
-                                    end
-                                else
-                                    task.wait(0.5)
-                                end
-                            end
-                        end)
-                    end
-                })
 
                 -- Chokeout (knock): fire the same client signals the other knock script uses -
                 -- CombatEffects "Chokeout2" + StopSprint (the chokeout you do while holding a grab).
