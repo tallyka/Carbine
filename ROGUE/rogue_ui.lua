@@ -27517,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 401 loaded - Fixed Hitbox Offset (Underground) going sideways: offset was applied in C0's rotated local space instead of world space", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 402 loaded - Hitbox Offset (Underground) now disables CanCollide on the rig so it doesn't physically fight the terrain", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -30492,9 +30492,38 @@ end
                     end
                     return ug_joint
                 end
+                -- The joint offset only moves where parts RENDER - the parts
+                -- themselves still have real collision, so they fight the terrain
+                -- as they clip into it. Drop CanCollide on the whole rig (not HRP -
+                -- that's what actually needs to keep colliding/staying put) while
+                -- the offset is active, restoring each part's original value after.
+                local ug_saved_collide = {}
+                local ug_nocollide_char = nil
+                local function ug_set_nocollide(c, disable)
+                    if disable then
+                        ug_saved_collide = {}
+                        for _, part in ipairs(c:GetDescendants()) do
+                            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                                ug_saved_collide[part] = part.CanCollide
+                                pcall(function() part.CanCollide = false end)
+                            end
+                        end
+                    else
+                        for part, orig in pairs(ug_saved_collide) do
+                            if part and part.Parent then
+                                pcall(function() part.CanCollide = orig end)
+                            end
+                        end
+                        ug_saved_collide = {}
+                    end
+                end
                 local function ug_stop()
                     if ug_joint and ug_base_c0 then
                         pcall(function() ug_joint.C0 = ug_base_c0 end)
+                    end
+                    if ug_nocollide_char then
+                        ug_set_nocollide(nil, false)
+                        ug_nocollide_char = nil
                     end
                 end
                 g_ext:AddSlider("xpfarm_hitbox_underground_depth", {
@@ -30514,6 +30543,10 @@ end
                     if not (Toggles.xpfarm_hitbox_underground and Toggles.xpfarm_hitbox_underground.Value) then return end
                     local c = plr.Character
                     if not c then return end
+                    if ug_nocollide_char ~= c then
+                        ug_set_nocollide(c, true)
+                        ug_nocollide_char = c
+                    end
                     local joint = ug_ensure(c)
                     if not joint or not ug_base_c0 then return end
                     local hrp = c:FindFirstChild("HumanoidRootPart")
