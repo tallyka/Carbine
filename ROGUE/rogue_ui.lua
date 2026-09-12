@@ -27517,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 400 loaded - Fixed Hitbox Offset (Underground): RootJoint lives under Torso on this R6 rig, not HumanoidRootPart", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 401 loaded - Fixed Hitbox Offset (Underground) going sideways: offset was applied in C0's rotated local space instead of world space", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -30516,8 +30516,18 @@ end
                     if not c then return end
                     local joint = ug_ensure(c)
                     if not joint or not ug_base_c0 then return end
+                    local hrp = c:FindFirstChild("HumanoidRootPart")
+                    if not hrp then return end
                     local depth = (Options.xpfarm_hitbox_underground_depth and Options.xpfarm_hitbox_underground_depth.Value) or 20
-                    local target = ug_base_c0 * CFrame.new(0, -depth, 0)
+                    -- Do the shift in WORLD space (base_world + a world-Y offset), then
+                    -- convert back into Part0(=HRP)-local space for C0 - this stays a
+                    -- true world-down shift no matter what rotation this rig's RootJoint
+                    -- C0 happens to have baked in (naively multiplying the offset onto
+                    -- C0 directly applies it in C0's own rotated local space instead,
+                    -- which is what sent it sideways).
+                    local base_world = hrp.CFrame * ug_base_c0
+                    local shifted_world = base_world + Vector3.new(0, -depth, 0)
+                    local target = hrp.CFrame:Inverse() * shifted_world
                     if (joint.C0.Position - target.Position).Magnitude > 0.05 then
                         pcall(function() joint.C0 = target end)
                     end
