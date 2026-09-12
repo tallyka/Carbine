@@ -27517,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 402 loaded - Hitbox Offset (Underground) now disables CanCollide on the rig so it doesn't physically fight the terrain", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 403 loaded - Misc: Khei Mode toggle lets path waypoints sit underground safely, auto-releases while Gate is equipped", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -30563,6 +30563,100 @@ end
                     local target = hrp.CFrame:Inverse() * shifted_world
                     if (joint.C0.Position - target.Position).Magnitude > 0.05 then
                         pcall(function() joint.C0 = target end)
+                    end
+                end)
+            end)
+
+            -- Khei Mode: for servers with no flight/position anti-cheat (Khei), lets
+            -- path waypoints sit underground safely. Disables real CanCollide on the
+            -- whole rig (including HumanoidRootPart this time - this is the actual
+            -- position, not a visual trick like Hitbox Offset above) and holds
+            -- vertical position/velocity so disabling collision doesn't just make the
+            -- character fall forever. Automatically lets go and restores collision
+            -- the moment the Gate tool is equipped - Trinket Bot's own Gate cast
+            -- needs real ground contact to fire (it raycasts down from the character
+            -- to confirm standing on solid ground), so this never fights that. Fully
+            -- external to Trinket Bot's own code - just watches what tool is held.
+            pcall(function()
+                local misc = library.Tabs and library.Tabs.Misc
+                if not misc then return end
+                local g_khei = misc:AddRightGroupbox("Khei Mode")
+
+                local khei_saved_collide = {}
+                local khei_char = nil
+                local khei_hold_y = nil
+
+                local function khei_set_nocollide(c, disable)
+                    if disable then
+                        khei_saved_collide = {}
+                        for _, part in ipairs(c:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                khei_saved_collide[part] = part.CanCollide
+                                pcall(function() part.CanCollide = false end)
+                            end
+                        end
+                    else
+                        for part, orig in pairs(khei_saved_collide) do
+                            if part and part.Parent then
+                                pcall(function() part.CanCollide = orig end)
+                            end
+                        end
+                        khei_saved_collide = {}
+                    end
+                end
+
+                g_khei:AddToggle("carbine_khei_mode", {
+                    Text = "Khei Mode",
+                    Default = false,
+                    Tooltip = "No-collides your real character and holds it in place vertically so it's safe to let path waypoints sit underground. Automatically restores collision and lets go while the Gate tool is equipped, so gating still works normally. Only use this on servers with no flight/position anti-cheat.",
+                    Callback = function(v)
+                        if not v then
+                            if khei_char then khei_set_nocollide(khei_char, false) end
+                            khei_char = nil
+                            khei_hold_y = nil
+                        end
+                    end
+                })
+
+                cheat_client.feature_connections.carbine_khei_mode = utility:Connection(rs.Heartbeat, function()
+                    if not shared or shared.is_unloading then return end
+                    if not (Toggles.carbine_khei_mode and Toggles.carbine_khei_mode.Value) then return end
+                    local c = plr.Character
+                    if not c then return end
+                    local hrp = c:FindFirstChild("HumanoidRootPart")
+                    if not hrp then return end
+
+                    if khei_char ~= c then
+                        if khei_char then khei_set_nocollide(khei_char, false) end
+                        khei_char = c
+                        khei_hold_y = nil
+                    end
+
+                    local held_tool = c:FindFirstChildOfClass("Tool")
+                    local gating = held_tool and held_tool.Name == "Gate"
+
+                    if gating then
+                        if next(khei_saved_collide) then
+                            khei_set_nocollide(c, false)
+                        end
+                        khei_hold_y = nil
+                    else
+                        if not next(khei_saved_collide) then
+                            khei_set_nocollide(c, true)
+                        end
+                        if not khei_hold_y then
+                            khei_hold_y = hrp.Position.Y
+                        end
+                        if math.abs(hrp.Position.Y - khei_hold_y) > 0.1 then
+                            pcall(function()
+                                local pos = hrp.Position
+                                hrp.CFrame = (hrp.CFrame - pos) + Vector3.new(pos.X, khei_hold_y, pos.Z)
+                            end)
+                        end
+                        pcall(function()
+                            local v = hrp.AssemblyLinearVelocity
+                            hrp.AssemblyLinearVelocity = Vector3.new(v.X, 0, v.Z)
+                        end)
                     end
                 end)
             end)
