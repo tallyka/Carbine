@@ -27517,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 397 loaded - Fixed: Show Menu Pan Cameras toggle was added to the wrong parent (Misc tab instead of its groupbox), never rendered", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 398 loaded - Menu Pan Cameras now draws the connecting travel path; Trinket Logger rides the existing Trinket ESP detection", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32548,7 +32548,33 @@ end
                     for _, region_folder in ipairs(src:GetChildren()) do
                         if region_folder:IsA("Folder") then
                             local color = region_colors[region_folder.Name] or Color3.fromRGB(255, 255, 255)
-                            for _, part in ipairs(region_folder:GetChildren()) do
+
+                            -- collect points in numeric order (1, 2, 3, ...) - that's
+                            -- the actual order the real camera pan travels in, and
+                            -- GetChildren() doesn't guarantee that order on its own.
+                            local pts = {}
+                            local n = 1
+                            while region_folder:FindFirstChild(tostring(n)) do
+                                table.insert(pts, region_folder[tostring(n)])
+                                n = n + 1
+                            end
+
+                            for i = 1, #pts - 1 do
+                                local cf1, cf2 = pts[i].CFrame, pts[i + 1].CFrame
+                                local dist = (cf1.Position - cf2.Position).Magnitude
+                                local pathPart = Instance.new("Part")
+                                pathPart.Size = Vector3.new(1, 1, dist)
+                                pathPart.Anchored = true
+                                pathPart.CanCollide = false
+                                pathPart.CanQuery = false
+                                pathPart.CanTouch = false
+                                pathPart.Material = Enum.Material.Neon
+                                pathPart.Color = color
+                                pathPart.CFrame = CFrame.new(cf1.Position, cf2.Position) * CFrame.new(0, 0, -dist / 2)
+                                pathPart.Parent = root
+                            end
+
+                            for _, part in ipairs(pts) do
                                 if part:IsA("BasePart") then
                                     local marker = Instance.new("Part")
                                     marker.Shape = Enum.PartType.Ball
@@ -32627,12 +32653,13 @@ end
                 })
             end)
 
-            -- Trinket Location Logger: watches workspace for anything shaped like a
-            -- spawned trinket (a Part with an "ID" value child + at least one MeshPart
-            -- child) and records its position to disk the first time it's seen. Builds
-            -- a real empirical spawn-point list over time since the game gives us no
-            -- static list to read - de-dupes by distance so repeat sightings of the
-            -- same physical spot don't spam the file with near-identical entries.
+            -- Trinket Location Logger: rides on the EXISTING Trinket ESP detection
+            -- (cheat_client.trinket_esp_objects, kept unconditionally populated by the
+            -- ws.ChildAdded hook elsewhere in this file - it doesn't need the visual
+            -- "Trinket ESP" toggle to be on) instead of re-detecting trinkets itself.
+            -- Just polls that table for entries not yet saved and records their real
+            -- identified name + position - de-dupes by distance so repeat sightings of
+            -- the same physical spot don't spam the file with near-identical entries.
             pcall(function()
                 local misc = library.Tabs and library.Tabs.Misc
                 if not misc then return end
@@ -32671,61 +32698,49 @@ end
                     return false
                 end
 
-                local function looks_like_trinket(p)
-                    if not p or not p:IsA("BasePart") then return false end
-                    if not p:FindFirstChild("ID") then return false end
-                    for _, c in ipairs(p:GetChildren()) do
-                        if c:IsA("MeshPart") then return true end
-                    end
-                    return false
-                end
-
                 local logging_active = false
                 local seen_instances = setmetatable({}, { __mode = "k" })
                 local count_label
 
-                local function try_log_candidate(inst)
-                    if not logging_active or not inst then return end
-                    local candidates = { inst, inst.Parent }
-                    for _, candidate in ipairs(candidates) do
-                        if candidate and not seen_instances[candidate] and looks_like_trinket(candidate) then
-                            seen_instances[candidate] = true
-                            local pos = candidate.Position
-                            if not already_logged(pos) then
-                                table.insert(trinket_locations, {
-                                    x = pos.X, y = pos.Y, z = pos.Z,
-                                    name = candidate.Name,
-                                    time = os.time(),
-                                })
-                                save_locations(trinket_locations)
-                                library:Notify(string.format("Trinket Logger: new spawn point recorded (%d total)", #trinket_locations), 4)
-                                if count_label then
-                                    pcall(function()
-                                        count_label:SetText(string.format("Recorded: %d unique spot(s)", #trinket_locations))
-                                    end)
-                                end
-                            end
-                        end
+                local function set_count_text()
+                    if count_label then
+                        pcall(function()
+                            count_label:SetText(string.format("Recorded: %d unique spot(s)", #trinket_locations))
+                        end)
                     end
                 end
 
-                local descendant_conn = nil
+                local poll_conn = nil
                 local function start_logging()
-                    if descendant_conn then return end
-                    for _, inst in ipairs(workspace:GetDescendants()) do
-                        try_log_candidate(inst)
-                    end
-                    descendant_conn = workspace.DescendantAdded:Connect(function(inst)
-                        task.wait(0.3)
-                        try_log_candidate(inst)
+                    if poll_conn then return end
+                    poll_conn = task.spawn(function()
+                        while logging_active and shared and not shared.is_unloading do
+                            pcall(function()
+                                for trinket, esp in pairs(cheat_client.trinket_esp_objects or {}) do
+                                    if not seen_instances[trinket] and trinket.Parent then
+                                        seen_instances[trinket] = true
+                                        local pos = trinket.Position
+                                        if not already_logged(pos) then
+                                            table.insert(trinket_locations, {
+                                                x = pos.X, y = pos.Y, z = pos.Z,
+                                                name = esp and esp.name or trinket.Name,
+                                                time = os.time(),
+                                            })
+                                            save_locations(trinket_locations)
+                                            library:Notify(string.format("Trinket Logger: %s recorded (%d total)", tostring(esp and esp.name), #trinket_locations), 4)
+                                            set_count_text()
+                                        end
+                                    end
+                                end
+                            end)
+                            task.wait(1)
+                        end
+                        poll_conn = nil
                     end)
                 end
 
                 local function stop_logging()
-                    if descendant_conn then
-                        descendant_conn:Disconnect()
-                        descendant_conn = nil
-                    end
+                    poll_conn = nil
                 end
 
                 count_label = g_tl:AddLabel("trinket_log_count_lbl", {
@@ -32736,7 +32751,7 @@ end
                 g_tl:AddToggle("carbine_log_trinkets", {
                     Text = "Log Trinket Spawn Locations",
                     Default = false,
-                    Tooltip = "Watches for anything shaped like a trinket (a Part with an 'ID' value + a MeshPart) appearing in the world, and saves its position to HYDROXIDE/trinket_locations.json the first time it's seen.",
+                    Tooltip = "Reads from the existing Trinket ESP detection (works even with the ESP display off) and saves each newly-seen trinket's real name + position to HYDROXIDE/trinket_locations.json.",
                     Callback = function(value)
                         logging_active = value
                         if value then
@@ -32753,11 +32768,7 @@ end
                         trinket_locations = {}
                         save_locations(trinket_locations)
                         seen_instances = setmetatable({}, { __mode = "k" })
-                        if count_label then
-                            pcall(function()
-                                count_label:SetText("Recorded: 0 unique spot(s)")
-                            end)
-                        end
+                        set_count_text()
                         library:Notify("Trinket Logger: cleared", 3)
                     end
                 })
