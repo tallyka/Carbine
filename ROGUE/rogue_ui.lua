@@ -27517,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 398 loaded - Menu Pan Cameras now draws the connecting travel path; Trinket Logger rides the existing Trinket ESP detection", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 399 loaded - Carbine Extras: Hitbox Offset (Underground) sinks your visual rig below ground without moving your real HRP", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -30453,6 +30453,58 @@ end
                     if t and t.IsPlaying then
                         if t.Speed ~= 0 then pcall(function() t:AdjustSpeed(0) end) end
                         if math.abs(t.TimePosition - HITBOX_FREEZE_T) > 0.02 then pcall(function() t.TimePosition = HITBOX_FREEZE_T end) end
+                    end
+                end)
+
+                -- Same principle as the Air offset above, but via a raw RootJoint C0
+                -- offset instead of a pre-made animation (no "sink into ground" anim
+                -- asset available) - only the rig's Motor6D offset changes, so the
+                -- visual body sinks below the terrain while HumanoidRootPart (the
+                -- real position Trinket Bot's arrival/pickup checks read) never
+                -- moves. Useful for staying out of a menu-pan camera's sightline
+                -- during a stationary wait_for_trinket stop without touching the
+                -- bot's own path-following logic at all.
+                local ug_char, ug_joint, ug_base_c0
+                local function ug_find_joint(c)
+                    local hrp = c:FindFirstChild("HumanoidRootPart")
+                    return hrp and hrp:FindFirstChild("RootJoint")
+                end
+                local function ug_ensure(c)
+                    if ug_char ~= c or not ug_joint or ug_joint.Parent == nil then
+                        ug_char = c
+                        ug_joint = ug_find_joint(c)
+                        ug_base_c0 = ug_joint and ug_joint.C0
+                    end
+                    return ug_joint
+                end
+                local function ug_stop()
+                    if ug_joint and ug_base_c0 then
+                        pcall(function() ug_joint.C0 = ug_base_c0 end)
+                    end
+                end
+                g_ext:AddSlider("xpfarm_hitbox_underground_depth", {
+                    Text = "Hitbox Offset (Underground) Depth",
+                    Default = 20, Min = 5, Max = 60, Rounding = 0, Suffix = " studs"
+                })
+                g_ext:AddToggle("xpfarm_hitbox_underground", {
+                    Text = "Hitbox Offset (Underground)",
+                    Default = false,
+                    Tooltip = "Offsets the rig's root joint so your visual body sinks below the ground while HumanoidRootPart stays exactly where the bot thinks you are - doesn't touch pickup/arrival logic at all. Purely visual, so it won't stop a real player from hitting you if they already know where you are.",
+                    Callback = function(v)
+                        if not v then ug_stop() end
+                    end
+                })
+                cheat_client.feature_connections.xpfarm_hitbox_underground = utility:Connection(rs.RenderStepped, function()
+                    if not shared or shared.is_unloading then return end
+                    if not (Toggles.xpfarm_hitbox_underground and Toggles.xpfarm_hitbox_underground.Value) then return end
+                    local c = plr.Character
+                    if not c then return end
+                    local joint = ug_ensure(c)
+                    if not joint or not ug_base_c0 then return end
+                    local depth = (Options.xpfarm_hitbox_underground_depth and Options.xpfarm_hitbox_underground_depth.Value) or 20
+                    local target = ug_base_c0 * CFrame.new(0, -depth, 0)
+                    if (joint.C0.Position - target.Position).Magnitude > 0.05 then
+                        pcall(function() joint.C0 = target end)
                     end
                 end)
             end)
