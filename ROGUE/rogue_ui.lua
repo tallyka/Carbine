@@ -27517,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 394 loaded - Auto Knock moved to the calibrated Self Fall Damage remote (Knock Yourself), no more teleport-fall", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 395 loaded - Misc: 'Show Menu Pan Cameras' toggle marks all 17 menu-background camera points + look-direction arrows", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -32504,6 +32504,127 @@ end
                         end
                     end
                 end)
+            end)
+
+            -- Menu Pan Camera markers: ReplicatedStorage.MenuPans holds the 17 camera
+            -- points the character-select background pan uses (5 regions, 3-4 points
+            -- each). Marks each with a colored ball + a beam narrowing to a point in
+            -- the direction that camera looks, so paths can be routed around them.
+            pcall(function()
+                local misc = library.Tabs and library.Tabs.Misc
+                if not misc then return end
+                local g_mp = misc:AddRightGroupbox("Menu Pan Cameras")
+
+                local RS = game:GetService("ReplicatedStorage")
+                local menu_pan_root = nil
+
+                local region_colors = {
+                    Folstarr = Color3.fromRGB(255, 60, 60),
+                    Desert = Color3.fromRGB(255, 200, 60),
+                    Jungle = Color3.fromRGB(60, 255, 100),
+                    Tundra = Color3.fromRGB(80, 180, 255),
+                    Crossing = Color3.fromRGB(255, 80, 220),
+                }
+
+                local function clear_menu_pan_markers()
+                    if menu_pan_root then
+                        pcall(function() menu_pan_root:Destroy() end)
+                        menu_pan_root = nil
+                    end
+                end
+
+                local function build_menu_pan_markers()
+                    local src = RS:FindFirstChild("MenuPans")
+                    if not src then
+                        library:Notify("Menu Pan Cameras: ReplicatedStorage.MenuPans not found", 5)
+                        return
+                    end
+
+                    local root = Instance.new("Folder")
+                    root.Name = "CarbineMenuPanMarkers"
+                    root.Parent = workspace
+                    menu_pan_root = root
+
+                    for _, region_folder in ipairs(src:GetChildren()) do
+                        if region_folder:IsA("Folder") then
+                            local color = region_colors[region_folder.Name] or Color3.fromRGB(255, 255, 255)
+                            for _, part in ipairs(region_folder:GetChildren()) do
+                                if part:IsA("BasePart") then
+                                    local marker = Instance.new("Part")
+                                    marker.Shape = Enum.PartType.Ball
+                                    marker.Size = Vector3.new(6, 6, 6)
+                                    marker.Anchored = true
+                                    marker.CanCollide = false
+                                    marker.CanQuery = false
+                                    marker.CanTouch = false
+                                    marker.Material = Enum.Material.Neon
+                                    marker.Color = color
+                                    marker.CFrame = part.CFrame
+                                    marker.Parent = root
+
+                                    local bb = Instance.new("BillboardGui")
+                                    bb.Size = UDim2.new(0, 160, 0, 40)
+                                    bb.StudsOffset = Vector3.new(0, 5, 0)
+                                    bb.AlwaysOnTop = true
+                                    bb.Parent = marker
+
+                                    local tl = Instance.new("TextLabel")
+                                    tl.Size = UDim2.new(1, 0, 1, 0)
+                                    tl.BackgroundTransparency = 1
+                                    tl.TextColor3 = Color3.new(1, 1, 1)
+                                    tl.TextStrokeTransparency = 0
+                                    tl.Font = Enum.Font.SourceSansBold
+                                    tl.TextScaled = true
+                                    tl.Text = region_folder.Name .. "." .. part.Name
+                                    tl.Parent = bb
+
+                                    local anchor = Instance.new("Part")
+                                    anchor.Size = Vector3.new(0.2, 0.2, 0.2)
+                                    anchor.Transparency = 1
+                                    anchor.Anchored = true
+                                    anchor.CanCollide = false
+                                    anchor.CanQuery = false
+                                    anchor.CFrame = part.CFrame
+                                    anchor.Parent = root
+                                    local a0 = Instance.new("Attachment")
+                                    a0.Parent = anchor
+
+                                    local endPart = Instance.new("Part")
+                                    endPart.Size = Vector3.new(0.2, 0.2, 0.2)
+                                    endPart.Transparency = 1
+                                    endPart.Anchored = true
+                                    endPart.CanCollide = false
+                                    endPart.CanQuery = false
+                                    endPart.CFrame = CFrame.new(part.CFrame.Position + part.CFrame.LookVector * 100)
+                                    endPart.Parent = root
+                                    local a1 = Instance.new("Attachment")
+                                    a1.Parent = endPart
+
+                                    local beam = Instance.new("Beam")
+                                    beam.Attachment0 = a0
+                                    beam.Attachment1 = a1
+                                    beam.Width0 = 2.5
+                                    beam.Width1 = 0.2
+                                    beam.Color = ColorSequence.new(color)
+                                    beam.FaceCamera = true
+                                    beam.Parent = anchor
+                                end
+                            end
+                        end
+                    end
+                end
+
+                misc:AddToggle("carbine_show_menu_pans", {
+                    Text = "Show Menu Pan Cameras",
+                    Default = false,
+                    Tooltip = "Marks all 17 menu-background camera points with a colored ball + an arrow-beam showing which way each one looks (red=Folstarr, yellow=Desert, green=Jungle, blue=Tundra, pink=Crossing). Useful for routing XP Farm paths around them.",
+                    Callback = function(value)
+                        clear_menu_pan_markers()
+                        if value then
+                            build_menu_pan_markers()
+                        end
+                    end
+                })
             end)
 
             -- serverhop + resume: save the path to a resume slot, remember where to
