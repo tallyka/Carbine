@@ -27517,7 +27517,7 @@ end
             -- you are running the GitHub copy, not this edited local file.
             pcall(function()
                 if library and library.Notify then
-                    library:Notify("CARBINE | XP Farm BUILD 399 loaded - Carbine Extras: Hitbox Offset (Underground) sinks your visual rig below ground without moving your real HRP", 20)
+                    library:Notify("CARBINE | XP Farm BUILD 400 loaded - Fixed Hitbox Offset (Underground): RootJoint lives under Torso on this R6 rig, not HumanoidRootPart", 20)
                 end
             end)
             print("[XP FARM] Monster XP Farm module loaded - look on the Botting tab")
@@ -30467,7 +30467,22 @@ end
                 local ug_char, ug_joint, ug_base_c0
                 local function ug_find_joint(c)
                     local hrp = c:FindFirstChild("HumanoidRootPart")
-                    return hrp and hrp:FindFirstChild("RootJoint")
+                    if hrp then
+                        local j = hrp:FindFirstChild("RootJoint")
+                        if j and j:IsA("Motor6D") then return j end
+                    end
+                    -- R6 (this game's rig) parents RootJoint under Torso, not HRP
+                    local torso = c:FindFirstChild("Torso") or c:FindFirstChild("UpperTorso")
+                    if torso then
+                        local j = torso:FindFirstChild("RootJoint")
+                        if j and j:IsA("Motor6D") then return j end
+                    end
+                    for _, d in ipairs(c:GetDescendants()) do
+                        if d:IsA("Motor6D") and d.Name == "RootJoint" then
+                            return d
+                        end
+                    end
+                    return nil
                 end
                 local function ug_ensure(c)
                     if ug_char ~= c or not ug_joint or ug_joint.Parent == nil then
